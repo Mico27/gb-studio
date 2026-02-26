@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add support for creating Notes that can be positioned and resized in the World view with multiple color options
+
+## [4.2.2] - 2026-02-24
+
+### Added
+
+- Add setting to control how many frames projectile collision checks are spread over
+- Add "Is Touching Wall" as a read only engine field for platformer scenes (gives access to `plat_wall_col`)
+
+### Changed
+
+- Deprecate legacy `scriptBuilder` plugin APIs. Usage now triggers a warning indicating the replacement function
+- Increased plugin compile timeout to 10 minutes (previously 1 minute)
+
+### Fixed
+
+- Fix issue where changing Music Tracker Keyboard Layout setting would not take effect until the project was reloaded
+- Fix Music Tracker keyboard shortcuts when using non-QWERTY layouts (QWERTZ, AZERTY, Dvorak, etc.)
+- Fix issue where off-screen actors would sometimes be visible on scene load
+- Fix issue where scenes with unicode character names could cause resources to be deleted when saving project
+- Fix issue where editing an FX Hammer file wouldn't correctly update the number of sound effects available
+- Fix issue where resizing a background image could cause builds to fail until the project was reloaded
+
+## [4.2.1] - 2026-02-13
+
+### Fixed
+
+- Fix issue on Windows where attempting to build would show EPERM error (hopefully)
+- Fix issue on Windows where Linking step would show unexpected warning message spread over multiple lines
+
+## [4.2.0] - 2026-02-13
+
+### Added
+
 - Add ability to define constant values, compared to variables these don't take any extra memory when used in game
 - Add ability to select all scenes with Ctrl/Cmd + A from Game World view
 - Add plugin manager for installing plugins from the official plugin repository, accessible from the menu at `Plugins / Plugin Manager`
