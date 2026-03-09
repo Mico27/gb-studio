@@ -73,6 +73,11 @@ import {
   Variable,
 } from "shared/lib/resources/types";
 import { uniqBy } from "lodash";
+import {
+  canMoveFolder,
+  reparentEntityPath,
+  reparentFolderPath,
+} from "shared/lib/helpers/virtualFilesystem";
 
 interface NormalizedEntities {
   scenes: Record<EntityId, SceneNormalized>;
@@ -365,6 +370,13 @@ export const denormalizeEntities = (
       _v: undefined,
     });
 
+  const stripFontDerivedProperties = <T extends FontAsset>(
+    font: T,
+  ): Omit<T, "mapping" | "table"> => {
+    const { mapping: _mapping, table: _table, ...rest } = font;
+    return rest;
+  };
+
   const denormalizedEntityResources: ProjectEntityResources = {
     scenes: denormalizedEntities.scenes.map((scene, sceneIndex) => ({
       _index: sceneIndex,
@@ -395,7 +407,9 @@ export const denormalizeEntities = (
     palettes: denormalizedEntities.palettes.map(entityToResource("palette")),
     emotes: denormalizedEntities.emotes.map(entityToResource("emote")),
     avatars: denormalizedEntities.avatars.map(entityToResource("avatar")),
-    fonts: denormalizedEntities.fonts.map(entityToResource("font")),
+    fonts: denormalizedEntities.fonts.map((font) =>
+      entityToResource("font")(stripFontDerivedProperties(font)),
+    ),
     tilesets: denormalizedEntities.tilesets.map(entityToResource("tileset")),
     sounds: denormalizedEntities.sounds.map(entityToResource("sound")),
     engineFieldValues: entityToResource("engineFieldValues")(
@@ -628,18 +642,30 @@ export const isTriggerPrefabEqual = (
 };
 
 export const actorName = (actor: NamedEntity, actorIndex: number) => {
+  if (actor.name.endsWith("/") || actor.name.endsWith("\\")) {
+    return `${actor.name}${defaultLocalisedActorName(actorIndex)}`;
+  }
   return actor.name || defaultLocalisedActorName(actorIndex);
 };
 
 export const triggerName = (trigger: NamedEntity, triggerIndex: number) => {
+  if (trigger.name.endsWith("/") || trigger.name.endsWith("\\")) {
+    return `${trigger.name}${defaultLocalisedTriggerName(triggerIndex)}`;
+  }
   return trigger.name || defaultLocalisedTriggerName(triggerIndex);
 };
 
 export const sceneName = (scene: NamedEntity, sceneIndex: number) => {
+  if (scene.name.endsWith("/") || scene.name.endsWith("\\")) {
+    return `${scene.name}${defaultLocalisedSceneName(sceneIndex)}`;
+  }
   return scene.name || defaultLocalisedSceneName(sceneIndex);
 };
 
 export const noteName = (note: NamedEntity, noteIndex: number) => {
+  if (note.name.endsWith("/") || note.name.endsWith("\\")) {
+    return `${note.name}${defaultLocalisedNoteName(noteIndex)}`;
+  }
   return note.name || defaultLocalisedNoteName(noteIndex);
 };
 
@@ -647,10 +673,18 @@ export const customEventName = (
   customEvent: NamedEntity,
   customEventIndex: number,
 ) => {
+  if (customEvent.name.endsWith("/") || customEvent.name.endsWith("\\")) {
+    return `${customEvent.name}${defaultLocalisedCustomEventName(customEventIndex)}`;
+  }
   return customEvent.name || defaultLocalisedCustomEventName(customEventIndex);
 };
 
 export const constantName = (constant: NamedEntity, constantIndex: number) => {
+  if (constant.name.endsWith("/") || constant.name.endsWith("\\")) {
+    return `${constant.name}${defaultLocalisedConstantName(constantIndex)}`
+      .toLocaleUpperCase()
+      .replace(/\s/g, "_");
+  }
   return (constant.name || defaultLocalisedConstantName(constantIndex))
     .toLocaleUpperCase()
     .replace(/\s/g, "_");
@@ -684,6 +718,9 @@ export const paletteName = (palette: Palette, paletteIndex: number) => {
     }
   }
   // Otherwise, use the auto-generated or user specified name
+  if (palette.name.endsWith("/") || palette.name.endsWith("\\")) {
+    return `${palette.name}${defaultLocalisedPaletteName(paletteIndex)}`;
+  }
   return palette.name || defaultLocalisedPaletteName(paletteIndex);
 };
 
@@ -693,8 +730,8 @@ const defaultLocalisedTriggerName = (triggerIndex: number) =>
   `${l10n("TRIGGER")} ${triggerIndex + 1}`;
 export const defaultLocalisedSceneName = (sceneIndex: number) =>
   `${l10n("SCENE")} ${sceneIndex + 1}`;
-export const defaultLocalisedNoteName = (sceneIndex: number) =>
-  `${l10n("NOTE")} ${sceneIndex + 1}`;
+export const defaultLocalisedNoteName = (noteIndex: number) =>
+  `${l10n("NOTE")} ${noteIndex + 1}`;
 export const defaultLocalisedCustomEventName = (customEventIndex: number) =>
   `${l10n("CUSTOM_EVENT")} ${customEventIndex + 1}`;
 export const defaultLocalisedConstantName = (constantIndex: number) =>
@@ -1150,4 +1187,34 @@ export const nextIndexedName = (
   );
 
   return `${prefix} ${nextIndex}`;
+};
+
+export const applyReparentFolderToCollection = <T extends { name: string }>(
+  collection: Record<string, T | undefined>,
+  fromPath: string,
+  toPath: string,
+) => {
+  if (!canMoveFolder(fromPath, toPath)) {
+    return;
+  }
+
+  for (const entity of Object.values(collection)) {
+    if (!entity) continue;
+
+    const newPath = reparentFolderPath(entity.name, fromPath, toPath);
+
+    if (newPath) {
+      entity.name = newPath;
+    }
+  }
+};
+
+export const applyReparentEntityToCollection = <T extends { name: string }>(
+  collection: Record<string, T | undefined>,
+  id: string,
+  toPath: string,
+): void => {
+  const entity = collection[id];
+  if (!entity) return;
+  entity.name = reparentEntityPath(entity.name, toPath);
 };
