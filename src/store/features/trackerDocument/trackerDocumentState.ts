@@ -7,18 +7,19 @@ import {
   createAction,
 } from "@reduxjs/toolkit";
 import cloneDeep from "lodash/cloneDeep";
-import { PatternCell } from "shared/lib/uge/song/PatternCell";
-import { Song } from "shared/lib/uge/song/Song";
-import { RootState } from "store/configureStore";
 import {
+  Song,
+  PatternCell,
+  SubPatternCell,
   DutyInstrument,
   NoiseInstrument,
   WaveInstrument,
-} from "./trackerDocumentTypes";
-import { SubPatternCell } from "shared/lib/uge/song/SubPatternCell";
+} from "shared/lib/uge/types";
+import { RootState } from "store/configureStore";
 import { InstrumentType } from "store/features/editor/editorState";
 import API from "renderer/lib/api";
 import { MusicResourceAsset } from "shared/lib/resources/types";
+import { createPatternCell, createSong } from "shared/lib/uge/song";
 
 interface TrackerDocumentState {
   status: "loading" | "error" | "loaded" | null;
@@ -208,14 +209,20 @@ const trackerSlice = createSlice({
       const patternId = _action.payload.patternId;
       const rowId = _action.payload.cell[0];
       const colId = _action.payload.cell[1];
-      const patternCell = state.song.patterns[patternId][rowId][colId];
+      const patternCell = state.song.patterns?.[patternId]?.[rowId]?.[colId];
+
+      if (!patternCell) {
+        return;
+      }
 
       let patch = { ..._action.payload.changes };
       if (
         patch.effectcode &&
         patch.effectcode !== null &&
+        (patch.effectparam === null || patch.effectparam === undefined) &&
         patternCell.effectparam === null
       ) {
+        // If there's an effect code but no effect param, default to 0
         patch = {
           ...patch,
           effectparam: 0,
@@ -401,10 +408,10 @@ const trackerSlice = createSlice({
         const pattern = [];
         for (let n = 0; n < 64; n++)
           pattern.push([
-            new PatternCell(),
-            new PatternCell(),
-            new PatternCell(),
-            new PatternCell(),
+            createPatternCell(),
+            createPatternCell(),
+            createPatternCell(),
+            createPatternCell(),
           ]);
         newPatterns.push(pattern);
 
@@ -433,10 +440,10 @@ const trackerSlice = createSlice({
       const pattern = [];
       for (let n = 0; n < 64; n++)
         pattern.push([
-          new PatternCell(),
-          new PatternCell(),
-          new PatternCell(),
-          new PatternCell(),
+          createPatternCell(),
+          createPatternCell(),
+          createPatternCell(),
+          createPatternCell(),
         ]);
       newPatterns.push(pattern);
 
@@ -467,6 +474,38 @@ const trackerSlice = createSlice({
         };
       }
     },
+    moveSequence: (
+      state,
+      action: PayloadAction<{ fromIndex: number; toIndex: number }>,
+    ) => {
+      if (!state.song) {
+        return;
+      }
+
+      const { fromIndex, toIndex } = action.payload;
+      const newSequence = [...state.song.sequence];
+
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= newSequence.length ||
+        toIndex >= newSequence.length
+      ) {
+        return;
+      }
+
+      const [movedItem] = newSequence.splice(fromIndex, 1);
+      if (movedItem === undefined) {
+        return;
+      }
+      newSequence.splice(toIndex, 0, movedItem);
+
+      state.song = {
+        ...state.song,
+        sequence: newSequence,
+      };
+    },
   },
   extraReducers: (builder) =>
     builder
@@ -476,7 +515,7 @@ const trackerSlice = createSlice({
       .addCase(loadSongFile.rejected, (state, action) => {
         console.error(action.error);
         state.status = "error";
-        state.song = new Song();
+        state.song = createSong();
         state.error = action.error.message;
       })
       .addCase(loadSongFile.fulfilled, (state, action) => {
@@ -502,7 +541,8 @@ const trackerSlice = createSlice({
         (action: UnknownAction): action is UnknownAction =>
           action.type.startsWith("tracker/edit") ||
           action.type.startsWith("tracker/addSequence") ||
-          action.type.startsWith("tracker/removeSequence"),
+          action.type.startsWith("tracker/removeSequence") ||
+          action.type.startsWith("tracker/moveSequence"),
         (state, _action) => {
           state.modified = true;
         },

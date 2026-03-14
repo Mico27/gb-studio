@@ -1,5 +1,7 @@
-import { Song } from "shared/lib/uge/song/Song";
+import { Song } from "shared/lib/uge/types";
 import { InstrumentType } from "store/features/editor/editorState";
+
+export const patternHue = (index: number) => ((index + 1) * 137.5) % 360;
 
 export const getInstrumentTypeByChannel = (
   channel: number,

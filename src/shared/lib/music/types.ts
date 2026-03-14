@@ -1,9 +1,9 @@
-import type { Song } from "shared/lib/uge/song/Song";
 import type {
+  Song,
   DutyInstrument,
   NoiseInstrument,
   WaveInstrument,
-} from "store/features/trackerDocument/trackerDocumentTypes";
+} from "shared/lib/uge/types";
 
 export type MusicDataPacket =
   | {
@@ -52,6 +52,11 @@ export type MusicDataPacket =
       action: "set-mute";
       channel: number;
       muted: boolean;
+    }
+  | {
+      action: "set-solo";
+      channel: number;
+      enabled: boolean;
     }
   | {
       action: "update";
