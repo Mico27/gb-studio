@@ -23,10 +23,9 @@ import {
 } from "components/music/musicClipboardHelpers";
 import { getKeys, KeyWhen } from "renderer/lib/keybindings/keyBindings";
 import trackerActions from "store/features/tracker/trackerActions";
-import clipboardActions from "store/features/clipboard/clipboardActions";
 import { clamp, cloneDeep, mergeWith } from "lodash";
 import API from "renderer/lib/api";
-import { MusicDataPacket } from "shared/lib/music/types";
+import { MusicDataReceivePacket } from "shared/lib/music/types";
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import { createPatternCell } from "shared/lib/uge/song";
 import l10n from "shared/lib/lang/l10n";
@@ -136,12 +135,12 @@ export const SongTracker = ({
     setPlaybackState(startPlaybackPosition);
   }, [setPlaybackState, startPlaybackPosition]);
   useEffect(() => {
-    const listener = (_event: unknown, d: MusicDataPacket) => {
+    const listener = (_event: unknown, d: MusicDataReceivePacket) => {
       if (d.action === "update") {
         setPlaybackState(d.update);
       }
     };
-    const unsubscribeMusicData = API.events.music.data.subscribe(listener);
+    const unsubscribeMusicData = API.events.music.response.subscribe(listener);
 
     return () => {
       unsubscribeMusicData();
@@ -422,23 +421,26 @@ export const SongTracker = ({
         const channel = Math.floor(activeField / 4) % 4;
         const defaultInstrument = defaultInstruments[channel];
 
-        if (song && value !== null) {
-          const instrumentType = getInstrumentTypeByChannel(channel) || "duty";
-          const instrumentList = getInstrumentListByType(song, instrumentType);
-          API.music.sendToMusicWindow({
-            action: "preview",
-            note: value + octaveOffset * 12,
-            type: instrumentType,
-            instrument: instrumentList[defaultInstrument],
-            square2: channel === 1,
-          });
-        }
-
         editPatternCell("note")(
           value === null ? null : value + octaveOffset * 12,
         );
         if (value !== null) {
           editPatternCell("instrument")(defaultInstrument);
+          if (song) {
+            const instrumentType =
+              getInstrumentTypeByChannel(channel) || "duty";
+            const instrumentList = getInstrumentListByType(
+              song,
+              instrumentType,
+            );
+            API.music.sendToMusicWindow({
+              action: "preview",
+              note: value + octaveOffset * 12,
+              type: instrumentType,
+              instrument: instrumentList[defaultInstrument],
+              square2: channel === 1,
+            });
+          }
           setActiveField(activeField + ROW_SIZE * editStep);
         }
       };
@@ -749,22 +751,29 @@ export const SongTracker = ({
           pattern,
           selectedTrackerFields,
         );
-        dispatch(clipboardActions.copyText(parsedSelectedPattern));
+        e.preventDefault();
+        e.clipboardData?.setData("text/plain", parsedSelectedPattern);
+        void API.clipboard.writeText(parsedSelectedPattern);
       }
     },
-    [dispatch, pattern, selectedTrackerFields],
+    [pattern, selectedTrackerFields],
   );
 
-  const onCut = useCallback(() => {
-    if (pattern && selectedTrackerFields) {
-      const parsedSelectedPattern = parsePatternFieldsToClipboard(
-        pattern,
-        selectedTrackerFields,
-      );
-      dispatch(clipboardActions.copyText(parsedSelectedPattern));
-      deleteSelectedTrackerFields();
-    }
-  }, [deleteSelectedTrackerFields, dispatch, pattern, selectedTrackerFields]);
+  const onCut = useCallback(
+    (e?: ClipboardEvent) => {
+      if (pattern && selectedTrackerFields) {
+        const parsedSelectedPattern = parsePatternFieldsToClipboard(
+          pattern,
+          selectedTrackerFields,
+        );
+        e?.preventDefault();
+        e?.clipboardData?.setData("text/plain", parsedSelectedPattern);
+        void API.clipboard.writeText(parsedSelectedPattern);
+        deleteSelectedTrackerFields();
+      }
+    },
+    [deleteSelectedTrackerFields, pattern, selectedTrackerFields],
+  );
 
   const onPaste = useCallback(async () => {
     if (pattern) {

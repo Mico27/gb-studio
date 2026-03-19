@@ -22,7 +22,6 @@ import { SelectionRect } from "components/music/piano/PianoRollCanvas";
 import scrollIntoView from "scroll-into-view-if-needed";
 import trackerDocumentActions from "store/features/trackerDocument/trackerDocumentActions";
 import { cloneDeep, mergeWith } from "lodash";
-import clipboardActions from "store/features/clipboard/clipboardActions";
 import { Position } from "components/music/tracker/SongTracker";
 import API from "renderer/lib/api";
 import { useAppDispatch, useAppSelector } from "store/hooks";
@@ -765,38 +764,47 @@ export const InstrumentSubpatternEditor = ({
     [dispatch],
   );
 
-  const onCopy = useCallback(() => {
-    if (activeField === undefined) {
-      return;
-    }
-    if (subpattern && selectedTrackerFields) {
-      const parsedSelectedPattern = parseSubPatternFieldsToClipboard(
-        subpattern,
-        selectedTrackerFields,
-      );
-      dispatch(clipboardActions.copyText(parsedSelectedPattern));
-    }
-  }, [activeField, dispatch, selectedTrackerFields, subpattern]);
+  const onCopy = useCallback(
+    (e?: ClipboardEvent) => {
+      if (activeField === undefined) {
+        return;
+      }
+      if (subpattern && selectedTrackerFields) {
+        const parsedSelectedPattern = parseSubPatternFieldsToClipboard(
+          subpattern,
+          selectedTrackerFields,
+        );
+        e?.preventDefault();
+        e?.clipboardData?.setData("text/plain", parsedSelectedPattern);
+        void API.clipboard.writeText(parsedSelectedPattern);
+      }
+    },
+    [activeField, selectedTrackerFields, subpattern],
+  );
 
-  const onCut = useCallback(() => {
-    if (activeField === undefined) {
-      return;
-    }
-    if (subpattern && selectedTrackerFields) {
-      const parsedSelectedPattern = parseSubPatternFieldsToClipboard(
-        subpattern,
-        selectedTrackerFields,
-      );
-      dispatch(clipboardActions.copyText(parsedSelectedPattern));
-      deleteSelectedTrackerFields();
-    }
-  }, [
-    activeField,
-    deleteSelectedTrackerFields,
-    dispatch,
-    selectedTrackerFields,
-    subpattern,
-  ]);
+  const onCut = useCallback(
+    (e?: ClipboardEvent) => {
+      if (activeField === undefined) {
+        return;
+      }
+      if (subpattern && selectedTrackerFields) {
+        const parsedSelectedPattern = parseSubPatternFieldsToClipboard(
+          subpattern,
+          selectedTrackerFields,
+        );
+        e?.preventDefault();
+        e?.clipboardData?.setData("text/plain", parsedSelectedPattern);
+        void API.clipboard.writeText(parsedSelectedPattern);
+        deleteSelectedTrackerFields();
+      }
+    },
+    [
+      activeField,
+      deleteSelectedTrackerFields,
+      selectedTrackerFields,
+      subpattern,
+    ],
+  );
 
   const onPaste = useCallback(async () => {
     if (subpattern) {

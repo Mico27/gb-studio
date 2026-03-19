@@ -52,7 +52,6 @@ import {
   EMULATOR_MUTED_SETTING_KEY,
   LOCALE_SETTING_KEY,
   musicTemplatesRoot,
-  projectTemplatesRoot,
   THEME_SETTING_KEY,
 } from "consts";
 import { getBackgroundInfo } from "lib/helpers/validation";
@@ -715,7 +714,7 @@ export const createMusic = async (
 
   // Handle sending initial message (if given) once window is initialized
   if (initialMessage) {
-    const listener = async (_event: unknown, d: MusicDataPacket) => {
+    const listener = async (_event: unknown, d: MusicDataReceivePacket) => {
       if (musicWindow && d.action === "initialized") {
         sendToMusicWindow("music:data", initialMessage);
         ipcMain.off("music:data-receive", listener);
@@ -1264,7 +1263,7 @@ ipcMain.on("music:data-receive", (_event, data: MusicDataReceivePacket) => {
     musicWindowInitialized = true;
   }
   if (projectWindow) {
-    sendToProjectWindow("music:data", data);
+    sendToProjectWindow("music:response", data);
   }
 });
 
