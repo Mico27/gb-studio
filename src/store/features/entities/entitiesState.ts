@@ -32,7 +32,7 @@ import {
 } from "consts";
 import { ScriptEventDefs } from "shared/lib/scripts/scriptDefHelpers";
 import clamp from "shared/lib/helpers/clamp";
-import { RootState } from "store/configureStore";
+import { RootState } from "store/storeTypes";
 import settingsActions from "store/features/settings/settingsActions";
 import uuid from "uuid";
 import {
@@ -91,7 +91,7 @@ import { addNewSongFile } from "store/features/trackerDocument/trackerDocumentSt
 import type { LoadProjectResult } from "lib/project/loadProjectData";
 import { decompressProjectResources } from "shared/lib/resources/compression";
 import { omit } from "shared/types";
-import { isEqual } from "lodash";
+import isEqual from "lodash/isEqual";
 import {
   AvatarAsset,
   AvatarResourceAsset,
@@ -827,39 +827,72 @@ const fixAllScenesWithModifiedBackgrounds = (state: EntitiesState) => {
   }
 };
 
-const fixAllSpritesWithMissingStates = (state: EntitiesState) => {
+const createDefaultSpriteStateData = (): {
+  metasprites: MetaspriteNormalized[];
+  animations: SpriteAnimationNormalized[];
+  spriteState: SpriteStateNormalized;
+} => {
+  const metasprites: MetaspriteNormalized[] = Array.from(Array(8)).map(() => ({
+    id: uuid(),
+    tiles: [],
+  }));
+
+  const animations: SpriteAnimationNormalized[] = metasprites.map(
+    (metasprite) => ({
+      id: uuid(),
+      frames: [metasprite.id],
+    }),
+  );
+
+  const spriteState: SpriteStateNormalized = {
+    id: uuid(),
+    name: "",
+    animationType: "multi_movement",
+    flipLeft: true,
+    animations: animations.map((animation) => animation.id),
+  };
+
+  return {
+    metasprites,
+    animations,
+    spriteState,
+  };
+};
+
+export const fixAllSpritesWithMissingStates = (state: EntitiesState) => {
   const sprites = localSpriteSheetSelectAll(state);
+
   for (const sprite of sprites) {
-    if (!sprite.states || sprite.states.length === 0) {
-      // Create default state for newly added spritesheets
-      const metasprites: MetaspriteNormalized[] = Array.from(Array(8)).map(
-        () => ({
-          id: uuid(),
-          tiles: [],
-        }),
-      );
-      const animations: SpriteAnimationNormalized[] = metasprites.map(
-        (metasprite) => ({
-          id: uuid(),
-          frames: [metasprite.id],
-        }),
-      );
-      const animationIds = animations.map((a) => a.id);
-      const spriteState: SpriteStateNormalized = {
-        id: uuid(),
-        name: "",
-        animationType: "multi_movement",
-        flipLeft: true,
-        animations: animationIds,
-      };
-      metaspritesAdapter.addMany(state.metasprites, metasprites);
-      spriteAnimationsAdapter.addMany(state.spriteAnimations, animations);
-      spriteStatesAdapter.addOne(state.spriteStates, spriteState);
-      spriteSheetsAdapter.upsertOne(state.spriteSheets, {
-        ...sprite,
-        states: [spriteState.id],
-      });
+    const validStateIds = (sprite.states ?? []).filter((spriteStateId) => {
+      return !!state.spriteStates.entities[spriteStateId];
+    });
+
+    if (validStateIds.length > 0) {
+      if (validStateIds.length !== sprite.states?.length) {
+        spriteSheetsAdapter.updateOne(state.spriteSheets, {
+          id: sprite.id,
+          changes: {
+            states: validStateIds,
+          },
+        });
+      }
+
+      continue;
     }
+
+    const { metasprites, animations, spriteState } =
+      createDefaultSpriteStateData();
+
+    metaspritesAdapter.addMany(state.metasprites, metasprites);
+    spriteAnimationsAdapter.addMany(state.spriteAnimations, animations);
+    spriteStatesAdapter.addOne(state.spriteStates, spriteState);
+
+    spriteSheetsAdapter.updateOne(state.spriteSheets, {
+      id: sprite.id,
+      changes: {
+        states: [spriteState.id],
+      },
+    });
   }
 };
 
@@ -4031,6 +4064,32 @@ const editPalette: CaseReducer<
   });
 };
 
+const editPaletteColor: CaseReducer<
+  EntitiesState,
+  PayloadAction<{
+    paletteId: string;
+    colorId: 0 | 1 | 2 | 3;
+    color: string;
+  }>
+> = (state, action) => {
+  const existingPalette = state.palettes.entities[action.payload.paletteId];
+  if (!existingPalette) {
+    return;
+  }
+
+  const [white, light, dark, black] = existingPalette.colors;
+
+  if (action.payload.colorId === 0) {
+    existingPalette.colors = [action.payload.color, light, dark, black];
+  } else if (action.payload.colorId === 1) {
+    existingPalette.colors = [white, action.payload.color, dark, black];
+  } else if (action.payload.colorId === 2) {
+    existingPalette.colors = [white, light, action.payload.color, black];
+  } else {
+    existingPalette.colors = [white, light, dark, action.payload.color];
+  }
+};
+
 const duplicatePalette: CaseReducer<
   EntitiesState,
   PayloadAction<{ paletteId: string; newPaletteId: string }>
@@ -5260,6 +5319,7 @@ const entitiesSlice = createSlice({
       },
     },
     editPalette,
+    editPaletteColor,
     duplicatePalette: {
       reducer: duplicatePalette,
       prepare: (payload: { paletteId: string }) => {

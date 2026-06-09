@@ -1,19 +1,25 @@
 import React, { useCallback } from "react";
 import API from "renderer/lib/api";
-import { StyledTrackerHeaderCell } from "./style";
+import {
+  StyledTrackerHeaderCell,
+  StyledTrackerHeaderCellContents,
+} from "./style";
 import { Button } from "ui/buttons/Button";
 import { ButtonGroup } from "ui/buttons/ButtonGroup";
 import trackerActions from "store/features/tracker/trackerActions";
 import { useAppDispatch } from "store/hooks";
 import l10n from "shared/lib/lang/l10n";
 import { ChannelMuteIcon, ChannelSoloIcon } from "ui/icons/Icons";
+import { patternBorder, patternGradient } from "shared/lib/uge/display";
 
 interface TrackerHeaderCellProps {
-  channel?: number;
-  type: "channel" | "patternIndex" | "order";
+  channel?: 0 | 1 | 2 | 3;
+  type: "channel" | "patternIndex";
   children?: React.ReactNode;
   muted?: boolean;
   solo?: boolean;
+  patternId?: number;
+  isFiltered?: boolean;
 }
 
 export const TrackerHeaderCell = ({
@@ -22,6 +28,8 @@ export const TrackerHeaderCell = ({
   muted,
   solo,
   channel,
+  patternId,
+  isFiltered,
 }: TrackerHeaderCellProps) => {
   const dispatch = useAppDispatch();
 
@@ -80,34 +88,42 @@ export const TrackerHeaderCell = ({
     [dispatch, channel, solo],
   );
 
-  // onMouseDown={setMute}
-
   return (
     <StyledTrackerHeaderCell
       $type={type}
       $muted={muted}
       $solo={solo}
       onMouseDown={onToggleMuteSolo}
+      style={
+        patternId !== undefined
+          ? {
+              background: patternGradient(patternId, !!isFiltered, true),
+              borderColor: patternBorder(patternId, !!isFiltered),
+            }
+          : undefined
+      }
     >
-      <span>{children}</span>
-      {type === "channel" && (
-        <ButtonGroup>
-          <Button
-            size="small"
-            onMouseDown={setSolo}
-            title={l10n("FIELD_SOLO_CHANNEL")}
-          >
-            <ChannelSoloIcon />
-          </Button>
-          <Button
-            size="small"
-            onMouseDown={setMute}
-            title={l10n("FIELD_MUTE_CHANNEL")}
-          >
-            <ChannelMuteIcon />
-          </Button>
-        </ButtonGroup>
-      )}
+      <StyledTrackerHeaderCellContents>
+        <span>{children}</span>
+        {type === "channel" && (
+          <ButtonGroup>
+            <Button
+              size="small"
+              onMouseDown={setSolo}
+              title={l10n("FIELD_SOLO_CHANNEL")}
+            >
+              <ChannelSoloIcon />
+            </Button>
+            <Button
+              size="small"
+              onMouseDown={setMute}
+              title={l10n("FIELD_MUTE_CHANNEL")}
+            >
+              <ChannelMuteIcon />
+            </Button>
+          </ButtonGroup>
+        )}
+      </StyledTrackerHeaderCellContents>
     </StyledTrackerHeaderCell>
   );
 };

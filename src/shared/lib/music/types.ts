@@ -5,7 +5,25 @@ import type {
   WaveInstrument,
 } from "shared/lib/uge/types";
 
+export type InstrumentType = "duty" | "wave" | "noise";
+
 export type MusicExportFormat = "wav" | "mp3" | "flac";
+
+export interface MusicPosition {
+  sequence: number;
+  row: number;
+}
+
+export interface MusicPlaybackState {
+  sequence: number;
+  row: number;
+  tick: number;
+  ticksPerRow: number;
+}
+
+export interface MusicPlaybackUpdate extends MusicPlaybackState {
+  source: "playback" | "position";
+}
 
 export type MusicDataPacket =
   | {
@@ -19,26 +37,47 @@ export type MusicDataPacket =
   | {
       action: "play";
       song: Song;
-      position?: [number, number];
-    }
-  | {
-      action: "play-sound";
+      position?: MusicPosition;
+      metronomeEnabled?: boolean;
+      loopSequenceId?: number;
     }
   | {
       action: "stop";
-      position?: [number, number];
+      position?: MusicPosition;
+    }
+  | {
+      action: "set-metronome-enabled";
+      enabled: boolean;
     }
   | {
       action: "position";
-      position: [number, number];
+      position: MusicPosition;
     }
   | {
       action: "preview";
-      type: "duty" | "wave" | "noise";
+      type: "duty";
       note: number;
-      instrument: DutyInstrument | NoiseInstrument | WaveInstrument;
-      square2: boolean;
-      waveForms?: Uint8Array[];
+      instrument: DutyInstrument;
+      channel: 0 | 1;
+      effectCode: number;
+      effectParam: number;
+    }
+  | {
+      action: "preview";
+      type: "wave";
+      note: number;
+      instrument: WaveInstrument;
+      waveForm: Uint8Array;
+      effectCode: number;
+      effectParam: number;
+    }
+  | {
+      action: "preview";
+      type: "noise";
+      note: number;
+      instrument: NoiseInstrument;
+      effectCode: number;
+      effectParam: number;
     }
   | {
       action: "export-song";
@@ -71,11 +110,11 @@ export type MusicDataReceivePacket =
     }
   | {
       action: "update";
-      update: [number, number];
+      update: MusicPlaybackUpdate;
     }
   | {
       action: "muted";
-      channels: boolean[];
+      channels: [boolean, boolean, boolean, boolean];
     }
   | {
       action: "exported-song";

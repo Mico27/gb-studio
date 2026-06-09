@@ -17,14 +17,18 @@ import editorActions from "store/features/editor/editorActions";
 import entitiesActions from "store/features/entities/entitiesActions";
 import { EntityListItem } from "ui/lists/EntityListItem";
 import useToggleableList from "ui/hooks/use-toggleable-list";
-import { useAppDispatch, useAppSelector } from "store/hooks";
+import {
+  useAppDispatch,
+  useAppSelector,
+  useAppSelectorPickArray,
+} from "store/hooks";
 import styled from "styled-components";
 import {
   SceneNavigatorItem,
   buildSceneNavigatorItems,
-  notesInFolder,
+  noteIdsInFolder,
   sceneParentFolders,
-  scenesInFolder,
+  sceneIdsInFolder,
 } from "shared/lib/entities/buildSceneNavigatorItems";
 import renderSceneContextMenu from "./renderSceneContextMenu";
 import renderActorContextMenu from "./renderActorContextMenu";
@@ -36,6 +40,8 @@ import { EntityListItemDnD } from "ui/lists/EntityListItemDnD";
 import ItemTypes from "renderer/lib/dnd/itemTypes";
 import { getParentPath } from "shared/lib/helpers/virtualFilesystem";
 import { useFlatListReparentDnD } from "ui/hooks/use-flatlist-reparent-dnd";
+import { FlatListOuterDropProvider } from "ui/lists/FlatListOuterDropContext";
+import { FlatListOuterDropTarget } from "ui/lists/FlatListOuterDropTarget";
 
 interface NavigatorScenesProps {
   height: number;
@@ -52,15 +58,31 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
   height,
   searchTerm,
 }) => {
-  const scenes = useAppSelector((state) => sceneSelectors.selectAll(state));
-  const notes = useAppSelector((state) => noteSelectors.selectAll(state));
+  const scenes = useAppSelectorPickArray(sceneSelectors.selectAll, [
+    "id",
+    "name",
+    "colorModeOverride",
+    "actors",
+    "triggers",
+    "labelColor",
+  ] as const);
 
-  const actorsLookup = useAppSelector((state) =>
-    actorSelectors.selectEntities(state),
-  );
-  const triggersLookup = useAppSelector((state) =>
-    triggerSelectors.selectEntities(state),
-  );
+  const notes = useAppSelectorPickArray(noteSelectors.selectAll, [
+    "id",
+    "name",
+    "labelColor",
+  ] as const);
+
+  const actors = useAppSelectorPickArray(actorSelectors.selectAll, [
+    "id",
+    "name",
+  ] as const);
+
+  const triggers = useAppSelectorPickArray(triggerSelectors.selectAll, [
+    "id",
+    "name",
+  ] as const);
+
   const sceneId = useAppSelector((state) => state.editor.scene);
   const entityId = useAppSelector((state) => state.editor.entityId);
   const editorType = useAppSelector((state) => state.editor.type);
@@ -82,6 +104,16 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
   const [folderId, setFolderId] = useState("");
 
   const dispatch = useAppDispatch();
+
+  const actorsLookup = useMemo(
+    () => Object.fromEntries(actors.map((actor) => [actor.id, actor])),
+    [actors],
+  );
+
+  const triggersLookup = useMemo(
+    () => Object.fromEntries(triggers.map((trigger) => [trigger.id, trigger])),
+    [triggers],
+  );
 
   const addToSelection = useRef(false);
 
@@ -113,21 +145,21 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
     unset: closeFolder,
   } = useToggleableList<string>([]);
 
-  const scene = useAppSelector((state) =>
-    sceneSelectors.selectById(state, sceneId),
+  const sceneName = useAppSelector(
+    (state) => sceneSelectors.selectById(state, sceneId)?.name,
   );
 
-  const note = useAppSelector((state) =>
-    noteSelectors.selectById(state, entityId),
+  const noteName = useAppSelector(
+    (state) => noteSelectors.selectById(state, entityId)?.name,
   );
 
   const openFolders = useMemo(() => {
     return [
       ...manuallyOpenedFolders,
-      ...(scene ? sceneParentFolders(scene) : []),
-      ...(note ? sceneParentFolders(note) : []),
+      ...(sceneName ? sceneParentFolders(sceneName) : []),
+      ...(noteName ? sceneParentFolders(noteName) : []),
     ];
-  }, [manuallyOpenedFolders, scene, note]);
+  }, [manuallyOpenedFolders, sceneName, noteName]);
 
   const nestedSceneItems = useMemo(
     () =>
@@ -321,8 +353,8 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
       } else if (item.type === "folder") {
         return renderSceneFolderContextMenu({
           dispatch,
-          scenes: scenesInFolder(item.id, scenes),
-          notes: notesInFolder(item.id, notes),
+          sceneIds: sceneIdsInFolder(item.id, scenes),
+          noteIds: noteIdsInFolder(item.id, notes),
         });
       } else {
         assertUnreachable(item);
@@ -355,7 +387,7 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
     [startSceneId, toggleFolderOpen],
   );
 
-  const { onDropOntoItem, flatListDropzone } =
+  const { onDropOntoItem, flatListDropProviderValue } =
     useFlatListReparentDnD<SceneNavigatorItem>({
       onReparent: (item, { dropFolder }) => {
         if (item.type === "folder") {
@@ -394,93 +426,95 @@ export const NavigatorScenes: FC<NavigatorScenesProps> = ({
     });
 
   return (
-    <FlatList
-      selectedId={selectedId}
-      highlightIds={folderId ? [] : sceneSelectionIds}
-      items={nestedSceneItems}
-      setSelectedId={setSelectedId}
-      height={height}
-      onKeyDown={(e: KeyboardEvent) => {
-        listenForRenameStart(e);
-        if (e.key === "ArrowRight") {
-          openFolder(selectedId);
-        } else if (e.key === "ArrowLeft") {
-          closeFolder(selectedId);
-        }
-      }}
-      outerElementType={flatListDropzone}
-      children={({ item }) => {
-        if (item.type === "scene") {
-          return (
-            <EntityListItemDnD
-              item={item}
-              type={item.type}
-              rename={renameId === item.id}
-              onRename={onRenameSceneComplete}
-              onRenameCancel={onRenameCancel}
-              renderContextMenu={renderContextMenu}
-              collapsable
-              collapsed={!openFolders.includes(item.id)}
-              onToggleCollapse={() => toggleFolderOpen(item.id)}
-              nestLevel={item.nestLevel}
-              renderLabel={renderLabel}
-              dragType={ItemTypes.SCENE}
-              acceptTypes={ACCEPT_TYPES}
-              onDrop={onDropOntoItem}
-            />
-          );
-        } else if (item.type === "folder") {
-          return (
-            <EntityListItemDnD
-              item={item}
-              type={item.type}
-              renderContextMenu={renderContextMenu}
-              collapsable
-              collapsed={!openFolders.includes(item.id)}
-              onToggleCollapse={() => toggleFolderOpen(item.id)}
-              nestLevel={item.nestLevel}
-              renderLabel={renderLabel}
-              dragType={ItemTypes.WORLD_FOLDER}
-              acceptTypes={ACCEPT_TYPES}
-              onDrop={onDropOntoItem}
-            />
-          );
-        } else if (item.type === "note") {
-          return (
-            <EntityListItemDnD
-              item={item}
-              type={item.type}
-              rename={renameId === item.id}
-              onRename={onRenameNoteComplete}
-              onRenameCancel={onRenameCancel}
-              renderContextMenu={renderContextMenu}
-              nestLevel={(item.nestLevel ?? 0) + 1}
-              renderLabel={renderLabel}
-              dragType={ItemTypes.NOTE}
-              acceptTypes={ACCEPT_TYPES}
-              onDrop={onDropOntoItem}
-            />
-          );
-        } else if (item.type === "actor" || item.type === "trigger") {
-          return (
-            <EntityListItem
-              item={item}
-              type={item.type}
-              nestLevel={item.nestLevel}
-              rename={renameId === item.id}
-              onRename={
-                item.type === "actor"
-                  ? onRenameActorComplete
-                  : onRenameTriggerComplete
-              }
-              onRenameCancel={onRenameCancel}
-              renderContextMenu={renderContextMenu}
-            />
-          );
-        } else {
-          assertUnreachable(item);
-        }
-      }}
-    />
+    <FlatListOuterDropProvider value={flatListDropProviderValue}>
+      <FlatList
+        selectedId={selectedId}
+        highlightIds={folderId ? [] : sceneSelectionIds}
+        items={nestedSceneItems}
+        setSelectedId={setSelectedId}
+        height={height}
+        onKeyDown={(e: KeyboardEvent) => {
+          listenForRenameStart(e);
+          if (e.key === "ArrowRight") {
+            openFolder(selectedId);
+          } else if (e.key === "ArrowLeft") {
+            closeFolder(selectedId);
+          }
+        }}
+        outerElementType={FlatListOuterDropTarget}
+        children={({ item }) => {
+          if (item.type === "scene") {
+            return (
+              <EntityListItemDnD
+                item={item}
+                type={item.type}
+                rename={renameId === item.id}
+                onRename={onRenameSceneComplete}
+                onRenameCancel={onRenameCancel}
+                renderContextMenu={renderContextMenu}
+                collapsable
+                collapsed={!openFolders.includes(item.id)}
+                onToggleCollapse={() => toggleFolderOpen(item.id)}
+                nestLevel={item.nestLevel}
+                renderLabel={renderLabel}
+                dragType={ItemTypes.SCENE}
+                acceptTypes={ACCEPT_TYPES}
+                onDrop={onDropOntoItem}
+              />
+            );
+          } else if (item.type === "folder") {
+            return (
+              <EntityListItemDnD
+                item={item}
+                type={item.type}
+                renderContextMenu={renderContextMenu}
+                collapsable
+                collapsed={!openFolders.includes(item.id)}
+                onToggleCollapse={() => toggleFolderOpen(item.id)}
+                nestLevel={item.nestLevel}
+                renderLabel={renderLabel}
+                dragType={ItemTypes.WORLD_FOLDER}
+                acceptTypes={ACCEPT_TYPES}
+                onDrop={onDropOntoItem}
+              />
+            );
+          } else if (item.type === "note") {
+            return (
+              <EntityListItemDnD
+                item={item}
+                type={item.type}
+                rename={renameId === item.id}
+                onRename={onRenameNoteComplete}
+                onRenameCancel={onRenameCancel}
+                renderContextMenu={renderContextMenu}
+                nestLevel={(item.nestLevel ?? 0) + 1}
+                renderLabel={renderLabel}
+                dragType={ItemTypes.NOTE}
+                acceptTypes={ACCEPT_TYPES}
+                onDrop={onDropOntoItem}
+              />
+            );
+          } else if (item.type === "actor" || item.type === "trigger") {
+            return (
+              <EntityListItem
+                item={item}
+                type={item.type}
+                nestLevel={item.nestLevel}
+                rename={renameId === item.id}
+                onRename={
+                  item.type === "actor"
+                    ? onRenameActorComplete
+                    : onRenameTriggerComplete
+                }
+                onRenameCancel={onRenameCancel}
+                renderContextMenu={renderContextMenu}
+              />
+            );
+          } else {
+            assertUnreachable(item);
+          }
+        }}
+      />
+    </FlatListOuterDropProvider>
   );
 };

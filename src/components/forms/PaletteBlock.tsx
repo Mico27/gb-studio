@@ -1,16 +1,17 @@
 import React from "react";
-import PropTypes from "prop-types";
 import styled, { css } from "styled-components";
+
+export type PaletteBlockType = "tile" | "sprite" | "sgb";
 
 type PaletteBlockProps = {
   colors: string[];
   size?: number;
-  type?: "tile" | "sprite";
+  type?: PaletteBlockType;
   highlight?: boolean;
 };
 
 type WrapperProps = {
-  $type?: "tile" | "sprite";
+  $type?: PaletteBlockType;
   $highlight?: boolean;
 };
 
@@ -29,7 +30,8 @@ const Wrapper = styled.div<WrapperProps>`
   flex-shrink: 0;
   transition: border 0.2s ease-in-out;
   transition-delay: ${(props) => (props.$highlight ? "0.5s" : "0")};
-  ${(props) => (props.$type === "sprite" ? spriteStyles : "")}
+  ${(props) =>
+    props.$type === "sprite" || props.$type === "sgb" ? spriteStyles : ""}
 `;
 
 const spriteStyles = css`
@@ -44,7 +46,7 @@ const PaletteBlock: React.FC<PaletteBlockProps> = ({
   size = 24,
   type = "tile",
   highlight,
-}) => (
+}: PaletteBlockProps) => (
   <Wrapper
     $type={type}
     $highlight={highlight}
@@ -54,6 +56,9 @@ const PaletteBlock: React.FC<PaletteBlockProps> = ({
     }}
   >
     {colors.map((color, index) => {
+      if (type === "sgb" && index === 0) {
+        return null;
+      }
       if (type === "sprite" && index === 2) {
         return null;
       }
@@ -68,10 +73,5 @@ const PaletteBlock: React.FC<PaletteBlockProps> = ({
     })}
   </Wrapper>
 );
-
-PaletteBlock.propTypes = {
-  colors: PropTypes.arrayOf(PropTypes.string.isRequired).isRequired,
-  size: PropTypes.number,
-};
 
 export default PaletteBlock;

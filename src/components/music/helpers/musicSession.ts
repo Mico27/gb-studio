@@ -1,9 +1,15 @@
 import type {
   MusicDataPacket,
   MusicDataReceivePacket,
+  MusicPlaybackState,
 } from "shared/lib/music/types";
-import player, { PlaybackPosition } from "./player";
-import { playNotePreview } from "./notePreview";
+import player from "./player";
+import { Song } from "shared/lib/uge/types";
+import {
+  createSequenceItem,
+  createPattern,
+  createSong,
+} from "shared/lib/uge/song";
 
 type MusicSessionListener = (data: MusicDataReceivePacket) => void;
 
@@ -13,11 +19,17 @@ export interface MusicSession {
   subscribe: (listener: MusicSessionListener) => () => void;
 }
 
-export const createMusicSession = (): MusicSession => {
+const createMusicSession = (): MusicSession => {
   let isInitialized = false;
   let isOpening = false;
   let openedSfx: string | undefined;
-  let position: PlaybackPosition = [0, 0];
+  let playbackState: MusicPlaybackState = {
+    sequence: 0,
+    row: 0,
+    tick: 0,
+    ticksPerRow: 0,
+  };
+  let loopSequenceId: number | undefined;
   let queuedActions: MusicDataPacket[] = [];
 
   const listeners = new Set<MusicSessionListener>();
@@ -42,6 +54,17 @@ export const createMusicSession = (): MusicSession => {
       case "load-song":
         player.reset();
         player.loadSong(data.song);
+        playbackState = {
+          sequence: 0,
+          row: 0,
+          tick: 0,
+          ticksPerRow: data.song.ticksPerRow,
+        };
+        player.setStartPosition({
+          sequence: playbackState.sequence,
+          row: playbackState.row,
+        });
+        loopSequenceId = undefined;
         emit({
           action: "log",
           message: "load song",
@@ -55,25 +78,39 @@ export const createMusicSession = (): MusicSession => {
         break;
       case "play":
         if (data.position) {
-          position = data.position;
+          playbackState = {
+            ...playbackState,
+            sequence: data.position.sequence,
+            row: data.position.row,
+          };
         }
+        playbackState = {
+          ...playbackState,
+          tick: 0,
+          ticksPerRow: data.song.ticksPerRow,
+        };
+        loopSequenceId = data.loopSequenceId;
         player.reset();
-        player.play(data.song, position);
+        player.setMetronomeEnabled(data.metronomeEnabled ?? false);
+        player.play(data.song, {
+          sequence: playbackState.sequence,
+          row: playbackState.row,
+        });
         emit({
           action: "log",
           message: "playing",
         });
         break;
-      case "play-sound":
-        player.playSound();
-        emit({
-          action: "log",
-          message: "playing SFX",
-        });
+      case "set-metronome-enabled":
+        player.setMetronomeEnabled(data.enabled);
         break;
       case "stop":
         if (data.position) {
-          position = data.position;
+          playbackState = {
+            ...playbackState,
+            sequence: data.position.sequence,
+            row: data.position.row,
+          };
         }
         player.stop(data.position);
         emit({
@@ -82,11 +119,23 @@ export const createMusicSession = (): MusicSession => {
         });
         break;
       case "position":
-        position = data.position;
+        playbackState = {
+          ...playbackState,
+          sequence: data.position.sequence,
+          row: data.position.row,
+          tick: 0,
+        };
         player.setStartPosition(data.position);
         emit({
           action: "log",
           message: "position",
+        });
+        emit({
+          action: "update",
+          update: {
+            ...playbackState,
+            source: "position",
+          },
         });
         break;
       case "set-mute":
@@ -102,25 +151,53 @@ export const createMusicSession = (): MusicSession => {
         });
         break;
       case "preview": {
-        let waves = data.waveForms || [];
-        const song = player.getCurrentSong();
-        if (waves.length === 0 && song) {
-          waves = song.waves;
+        if (!data.instrument) {
+          break;
         }
-        playNotePreview(
-          data.note,
-          data.type,
-          data.instrument,
-          data.square2,
-          waves,
-        );
-        emit({
-          action: "log",
-          message: "preview",
-        });
+        const previewSong: Song = createSong();
+        previewSong.patterns = [
+          createPattern(),
+          createPattern(),
+          createPattern(),
+          createPattern(),
+        ];
+        previewSong.sequence = [createSequenceItem(0)];
+        if (data.type === "duty") {
+          const pattern = previewSong.patterns[data.channel];
+          const row = pattern[0];
+          row.note = data.note;
+          row.instrument = 0;
+          row.effectCode = data.effectCode;
+          row.effectParam = data.effectParam;
+          previewSong.dutyInstruments = [data.instrument];
+        } else if (data.type === "wave") {
+          const pattern = previewSong.patterns[2];
+          const row = pattern[0];
+          row.note = data.note;
+          row.instrument = 0;
+          row.effectCode = data.effectCode;
+          row.effectParam = data.effectParam;
+          previewSong.waveInstruments = [
+            {
+              ...data.instrument,
+              waveIndex: 0,
+            },
+          ];
+          previewSong.waves = [data.waveForm];
+        } else if (data.type === "noise") {
+          const pattern = previewSong.patterns[3];
+          const row = pattern[0];
+          row.note = data.note;
+          row.instrument = 0;
+          row.effectCode = data.effectCode;
+          row.effectParam = data.effectParam;
+          previewSong.noiseInstruments = [data.instrument];
+        }
+        player.playPreview(previewSong, 500);
         break;
       }
       case "export-song": {
+        player.reset();
         void player
           .exportSong(data.song, data.format, data.loopCount)
           .then((fileData) => {
@@ -149,10 +226,36 @@ export const createMusicSession = (): MusicSession => {
   };
 
   player.setOnIntervalCallback((playbackUpdate) => {
-    position = playbackUpdate;
+    const shouldLoop =
+      loopSequenceId !== undefined &&
+      playbackUpdate.sequence !== loopSequenceId;
+
+    if (shouldLoop && loopSequenceId !== undefined) {
+      playbackState = {
+        sequence: loopSequenceId,
+        row: 0,
+        tick: 0,
+        ticksPerRow: playbackUpdate.ticksPerRow,
+      };
+      player.setStartPosition({
+        sequence: playbackState.sequence,
+        row: playbackState.row,
+      });
+    } else {
+      playbackState = {
+        sequence: playbackUpdate.sequence,
+        row: playbackUpdate.row,
+        tick: playbackUpdate.tick,
+        ticksPerRow: playbackUpdate.ticksPerRow,
+      };
+    }
+
     emit({
       action: "update",
-      update: playbackUpdate,
+      update: {
+        ...playbackState,
+        source: "playback",
+      },
     });
   });
 

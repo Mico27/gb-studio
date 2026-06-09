@@ -7,7 +7,11 @@ import {
   nextIndexedName,
   applyReparentFolderToCollection,
   applyReparentEntityToCollection,
+  pruneMissingEntities,
+  denormalizeEntities,
+  updateCustomEventArgs,
 } from "shared/lib/entities/entitiesHelpers";
+import { initialState as initialEntitiesState } from "store/features/entities/entitiesState";
 import {
   ActorPrefabNormalized,
   EntitiesState,
@@ -18,6 +22,8 @@ import {
   dummyActorPrefabNormalized,
   dummyTriggerPrefabNormalized,
 } from "../dummydata";
+import cloneDeep from "lodash/cloneDeep";
+import { schema } from "normalizr";
 
 describe("isActorPrefabEqual", () => {
   it("should return true if prefabs and scripts are equal", () => {
@@ -423,6 +429,202 @@ describe("getMetaspriteTilesForSpriteSheet", () => {
     expect(spriteTiles.length).toEqual(1);
     expect(spriteTiles.map((t) => t.id)).toEqual(["tile1"]);
   });
+
+  test("Should ignore missing sprite state references", () => {
+    const state = {
+      spriteSheets: {
+        entities: {
+          spriteSheet1: {
+            id: "spriteSheet1",
+            states: ["state1", "missingState"],
+          },
+        },
+      },
+      spriteStates: {
+        entities: {
+          state1: {
+            id: "state1",
+            animations: ["anim1"],
+          },
+        },
+      },
+      spriteAnimations: {
+        entities: {
+          anim1: {
+            id: "anim1",
+            frames: ["frame1"],
+          },
+        },
+      },
+      metasprites: {
+        entities: {
+          frame1: {
+            id: "frame1",
+            tiles: ["tile1"],
+          },
+        },
+      },
+      metaspriteTiles: {
+        entities: {
+          tile1: {
+            id: "tile1",
+          },
+        },
+      },
+    } as unknown as EntitiesState;
+
+    const spriteTiles = getMetaspriteTilesForSpriteSheet(state, "spriteSheet1");
+
+    expect(spriteTiles.length).toEqual(1);
+    expect(spriteTiles.map((t) => t.id)).toEqual(["tile1"]);
+  });
+
+  test("Should ignore missing sprite animation references", () => {
+    const state = {
+      spriteSheets: {
+        entities: {
+          spriteSheet1: {
+            id: "spriteSheet1",
+            states: ["state1"],
+          },
+        },
+      },
+      spriteStates: {
+        entities: {
+          state1: {
+            id: "state1",
+            animations: ["anim1", "missingAnim"],
+          },
+        },
+      },
+      spriteAnimations: {
+        entities: {
+          anim1: {
+            id: "anim1",
+            frames: ["frame1"],
+          },
+        },
+      },
+      metasprites: {
+        entities: {
+          frame1: {
+            id: "frame1",
+            tiles: ["tile1"],
+          },
+        },
+      },
+      metaspriteTiles: {
+        entities: {
+          tile1: {
+            id: "tile1",
+          },
+        },
+      },
+    } as unknown as EntitiesState;
+
+    const spriteTiles = getMetaspriteTilesForSpriteSheet(state, "spriteSheet1");
+
+    expect(spriteTiles.length).toEqual(1);
+    expect(spriteTiles.map((t) => t.id)).toEqual(["tile1"]);
+  });
+
+  test("Should ignore missing metasprite references", () => {
+    const state = {
+      spriteSheets: {
+        entities: {
+          spriteSheet1: {
+            id: "spriteSheet1",
+            states: ["state1"],
+          },
+        },
+      },
+      spriteStates: {
+        entities: {
+          state1: {
+            id: "state1",
+            animations: ["anim1"],
+          },
+        },
+      },
+      spriteAnimations: {
+        entities: {
+          anim1: {
+            id: "anim1",
+            frames: ["frame1", "missingFrame"],
+          },
+        },
+      },
+      metasprites: {
+        entities: {
+          frame1: {
+            id: "frame1",
+            tiles: ["tile1"],
+          },
+        },
+      },
+      metaspriteTiles: {
+        entities: {
+          tile1: {
+            id: "tile1",
+          },
+        },
+      },
+    } as unknown as EntitiesState;
+
+    const spriteTiles = getMetaspriteTilesForSpriteSheet(state, "spriteSheet1");
+
+    expect(spriteTiles.length).toEqual(1);
+    expect(spriteTiles.map((t) => t.id)).toEqual(["tile1"]);
+  });
+
+  test("Should ignore missing metasprite tile references", () => {
+    const state = {
+      spriteSheets: {
+        entities: {
+          spriteSheet1: {
+            id: "spriteSheet1",
+            states: ["state1"],
+          },
+        },
+      },
+      spriteStates: {
+        entities: {
+          state1: {
+            id: "state1",
+            animations: ["anim1"],
+          },
+        },
+      },
+      spriteAnimations: {
+        entities: {
+          anim1: {
+            id: "anim1",
+            frames: ["frame1"],
+          },
+        },
+      },
+      metasprites: {
+        entities: {
+          frame1: {
+            id: "frame1",
+            tiles: ["tile1", "missingTile"],
+          },
+        },
+      },
+      metaspriteTiles: {
+        entities: {
+          tile1: {
+            id: "tile1",
+          },
+        },
+      },
+    } as unknown as EntitiesState;
+
+    const spriteTiles = getMetaspriteTilesForSpriteSheet(state, "spriteSheet1");
+
+    expect(spriteTiles.length).toEqual(1);
+    expect(spriteTiles.map((t) => t.id)).toEqual(["tile1"]);
+  });
 });
 
 describe("nextIndexedName", () => {
@@ -445,6 +647,66 @@ describe("nextIndexedName", () => {
     const existingNames = ["Palette", "Palette 1", "Palette 3"];
     const nextName = nextIndexedName("Palette", existingNames);
     expect(nextName).toBe("Palette 2");
+  });
+});
+
+describe("updateCustomEventArgs", () => {
+  test("Should include custom event variables referenced by data table fields", () => {
+    const customEvent = {
+      id: "customEvent1",
+      name: "Custom Event 1",
+      description: "",
+      symbol: "custom_event_1",
+      variables: {
+        V1: {
+          id: "V1",
+          name: "Existing Variable",
+          passByReference: false,
+        },
+      },
+      actors: {},
+      script: ["event1"],
+    } as Parameters<typeof updateCustomEventArgs>[0];
+
+    updateCustomEventArgs(
+      customEvent,
+      {
+        event1: {
+          id: "event1",
+          command: "EVENT_DATA_TABLE",
+          args: {
+            data: {
+              variables: ["V1", "0", "T0"],
+              rows: [
+                {
+                  label: "Row 1",
+                  values: [{ type: "number", value: 1 }],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        EVENT_DATA_TABLE: {
+          id: "EVENT_DATA_TABLE",
+          fieldsLookup: {
+            data: {
+              key: "data",
+              type: "dataTable",
+            },
+          },
+        },
+      } as never,
+    );
+
+    expect(customEvent.variables).toEqual({
+      V1: {
+        id: "V1",
+        name: "Existing Variable",
+        passByReference: false,
+      },
+    });
   });
 });
 
@@ -674,5 +936,326 @@ describe("applyReparentEntityToCollection", () => {
 
     expect(collection.a.name).toBe("x/file.txt");
     expect(collection.b.name).toBe("b/file.txt");
+  });
+});
+
+describe("pruneMissingEntities", () => {
+  test("preserves undefined values from arrays when no schema is provided", () => {
+    expect(pruneMissingEntities([1, undefined, 2, undefined, 3])).toEqual([
+      1,
+      undefined,
+      2,
+      undefined,
+      3,
+    ]);
+  });
+
+  test("preserves undefined values from nested arrays when no schema is provided", () => {
+    expect(pruneMissingEntities([1, [undefined, 2], undefined, [3]])).toEqual([
+      1,
+      [undefined, 2],
+      undefined,
+      [3],
+    ]);
+  });
+
+  test("removes undefined and null values from arrays when schema disallows missing entity references", () => {
+    const itemSchema = new schema.Entity("items");
+
+    expect(
+      pruneMissingEntities(
+        [undefined, null, { id: "item1" }, { id: "item2" }],
+        [itemSchema],
+      ),
+    ).toEqual([{ id: "item1" }, { id: "item2" }]);
+  });
+
+  test("removes undefined and null values from nested arrays when nested schema disallows missing entity references", () => {
+    const frameSchema = new schema.Entity("frames");
+    const animationSchema = new schema.Entity("animations", {
+      frames: [frameSchema],
+    });
+    const stateSchema = new schema.Entity("states", {
+      animations: [animationSchema],
+    });
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          states: [
+            undefined,
+            null,
+            {
+              id: "state1",
+              animations: [
+                undefined,
+                null,
+                {
+                  id: "anim1",
+                  frames: [undefined, null, { id: "frame1", tiles: [] }],
+                },
+              ],
+            },
+          ],
+        },
+        spriteSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      states: [
+        {
+          id: "state1",
+          animations: [
+            {
+              id: "anim1",
+              frames: [{ id: "frame1", tiles: [] }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("preserves null and undefined values in arrays when the schema does not define that field", () => {
+    const spriteSchema = new schema.Entity("sprites");
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          nullableValues: [null, undefined, "my-id"],
+        },
+        spriteSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      nullableValues: [null, undefined, "my-id"],
+    });
+  });
+
+  test("preserves null and undefined values in arrays when no schema is provided for that field", () => {
+    const stateSchema = new schema.Entity("states");
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          states: [{ id: "state1" }],
+          nullableValues: [null, undefined, "my-id"],
+        },
+        spriteSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      states: [{ id: "state1" }],
+      nullableValues: [null, undefined, "my-id"],
+    });
+  });
+
+  test("prunes only fields defined in a plain object schema", () => {
+    const itemSchema = new schema.Entity("items");
+
+    expect(
+      pruneMissingEntities(
+        {
+          items: [undefined, null, { id: "item1" }],
+          values: [null, undefined, "keep-me"],
+        },
+        {
+          items: [itemSchema],
+        },
+      ),
+    ).toEqual({
+      items: [{ id: "item1" }],
+      values: [null, undefined, "keep-me"],
+    });
+  });
+
+  test("preserves undefined object properties", () => {
+    const itemSchema = new schema.Entity("items");
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          notes: undefined,
+        },
+        itemSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      notes: undefined,
+    });
+  });
+
+  test("preserves null object properties", () => {
+    const itemSchema = new schema.Entity("items");
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          value: null,
+        },
+        itemSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      value: null,
+    });
+  });
+
+  test("preserves null and undefined values in data arrays while pruning missing entity arrays in the same object", () => {
+    const stateSchema = new schema.Entity("states");
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "sprite1",
+          states: [undefined, null, { id: "state1" }],
+          items: [null, undefined, { value: null }],
+        },
+        spriteSchema,
+      ),
+    ).toEqual({
+      id: "sprite1",
+      states: [{ id: "state1" }],
+      items: [null, undefined, { value: null }],
+    });
+  });
+
+  test("removes undefined and null values from Values schema arrays", () => {
+    const scriptEventSchema = new schema.Entity("scriptEvents");
+    scriptEventSchema.define({
+      children: new schema.Values([scriptEventSchema]),
+    });
+
+    expect(
+      pruneMissingEntities(
+        {
+          id: "event1",
+          command: "EVENT_IF_TRUE",
+          children: {
+            true: [undefined, null, { id: "child1", command: "EVENT_END" }],
+            false: undefined,
+          },
+        },
+        scriptEventSchema,
+      ),
+    ).toEqual({
+      id: "event1",
+      command: "EVENT_IF_TRUE",
+      children: {
+        true: [{ id: "child1", command: "EVENT_END" }],
+        false: undefined,
+      },
+    });
+  });
+
+  test("denormalizeEntities prunes missing script event children while preserving undefined child branches", () => {
+    const state: EntitiesState = cloneDeep(initialEntitiesState);
+    state.customEvents = {
+      ids: ["script1"],
+      entities: {
+        script1: {
+          id: "script1",
+          name: "Script 1",
+          symbol: "symbol",
+          description: "Description",
+          variables: {
+            var1: { id: "var1", name: "Variable 1", passByReference: false },
+          },
+          actors: { actor1: { id: "actor1", name: "Actor 1" } },
+          script: ["event1"],
+        },
+      },
+    };
+    state.scriptEvents = {
+      ids: ["event1"],
+      entities: {
+        event1: {
+          id: "event1",
+          command: "EVENT_IF_TRUE",
+          children: {
+            true: ["event2"],
+          },
+        },
+      },
+    };
+
+    expect(denormalizeEntities(state).scripts[0]?.script).toEqual([
+      {
+        id: "event1",
+        command: "EVENT_IF_TRUE",
+        children: {
+          true: [],
+          false: undefined,
+        },
+      },
+    ]);
+  });
+
+  test("denormalizeEntities doesn't prune if all children are present", () => {
+    const state: EntitiesState = cloneDeep(initialEntitiesState);
+    state.customEvents = {
+      ids: ["script1"],
+      entities: {
+        script1: {
+          id: "script1",
+          name: "Script 1",
+          symbol: "symbol",
+          description: "Description",
+          variables: {
+            var1: { id: "var1", name: "Variable 1", passByReference: false },
+          },
+          actors: { actor1: { id: "actor1", name: "Actor 1" } },
+          script: ["event1"],
+        },
+      },
+    };
+    state.scriptEvents = {
+      ids: ["event1", "event2"],
+      entities: {
+        event1: {
+          id: "event1",
+          command: "EVENT_IF_TRUE",
+          children: {
+            true: ["event2"],
+          },
+        },
+        event2: {
+          id: "event2",
+          command: "EVENT_END",
+          args: {},
+        },
+      },
+    };
+
+    expect(denormalizeEntities(state).scripts[0]?.script).toEqual([
+      {
+        id: "event1",
+        command: "EVENT_IF_TRUE",
+        children: {
+          true: [
+            {
+              id: "event2",
+              command: "EVENT_END",
+              args: {},
+            },
+          ],
+          false: undefined,
+        },
+      },
+    ]);
   });
 });

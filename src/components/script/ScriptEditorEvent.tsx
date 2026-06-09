@@ -51,8 +51,9 @@ import { useAppDispatch, useAppSelector } from "store/hooks";
 import { ScriptEditorContext } from "components/script/ScriptEditorContext";
 import { getSettings } from "store/features/settings/settingsState";
 import renderScriptEventContextMenu from "components/script/renderScriptEventContextMenu";
-import { ContextMenu } from "ui/menu/ContextMenu";
 import { ScriptEventChildren } from "components/script/ScriptEventChildren";
+import { Identifier } from "dnd-core";
+import { useContextMenu } from "ui/hooks/use-context-menu";
 
 interface ScriptEditorEventProps {
   id: string;
@@ -166,7 +167,7 @@ const ScriptEditorEvent = React.memo(
     }, [dispatch, id, parentId, parentKey, parentType]);
 
     const onFetchClipboard = useCallback(
-      (e: React.MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
+      (e: React.MouseEvent) => {
         onSelect(e.shiftKey);
         dispatch(clipboardActions.fetchClipboard());
       },
@@ -177,7 +178,11 @@ const ScriptEditorEvent = React.memo(
       setRename(!rename);
     }, [rename]);
 
-    const [{ handlerId, isOverCurrent }, drop] = useDrop({
+    const [{ handlerId, isOverCurrent }, drop] = useDrop<
+      ScriptEventsRef,
+      void,
+      { isOverCurrent: boolean; handlerId: Identifier | null }
+    >({
       accept: ItemTypes.SCRIPT_EVENT,
       collect(monitor) {
         return {
@@ -399,24 +404,21 @@ const ScriptEditorEvent = React.memo(
       ],
     );
 
-    const [contextMenu, setContextMenu] = useState<{
-      x: number;
-      y: number;
-      menu: JSX.Element[];
-    }>();
+    //#region Context Menu
 
-    const onContextMenu = useCallback(
-      (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-        e.stopPropagation();
-        onFetchClipboard(e);
-        setContextMenu({ x: e.pageX, y: e.pageY, menu: contextMenuItems });
+    const getContextMenu = useCallback(
+      ({ event }: { event: React.MouseEvent }) => {
+        onFetchClipboard(event);
+        return contextMenuItems;
       },
-      [contextMenuItems, onFetchClipboard],
+      [onFetchClipboard, contextMenuItems],
     );
 
-    const onContextMenuClose = useCallback(() => {
-      setContextMenu(undefined);
-    }, []);
+    const { onContextMenu, contextMenuElement } = useContextMenu({
+      getMenu: getContextMenu,
+    });
+
+    //#endregion Context Menu
 
     const renderEvents = useCallback(
       (key: string, label: string) => {
@@ -506,6 +508,7 @@ const ScriptEditorEvent = React.memo(
               isSelected={scriptEventSelectionIds.includes(scriptEvent.id)}
               isExecuting={isExecuting}
               isBreakpoint={breakpointEnabled}
+              isMultiSelectable
               breakpointTitle={l10n("FIELD_BREAKPOINT")}
               menuItems={contextMenuItems}
               onOpenMenu={onFetchClipboard}
@@ -565,15 +568,7 @@ const ScriptEditorEvent = React.memo(
             </ScriptEventFormWrapper>
           )}
         </div>
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            onClose={onContextMenuClose}
-          >
-            {contextMenu.menu}
-          </ContextMenu>
-        )}
+        {contextMenuElement}
       </ScriptEventWrapper>
     );
   },

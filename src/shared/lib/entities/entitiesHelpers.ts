@@ -1,4 +1,10 @@
-import { normalize, denormalize, schema, NormalizedSchema } from "normalizr";
+import {
+  normalize,
+  denormalize,
+  schema,
+  NormalizedSchema,
+  Schema,
+} from "normalizr";
 import pick from "lodash/pick";
 import cloneDeep from "lodash/cloneDeep";
 import {
@@ -31,6 +37,7 @@ import { isNormalizedScriptEqual } from "shared/lib/scripts/scriptHelpers";
 import {
   ScriptEventDefs,
   isActorField,
+  isDataTableField,
   isPropertyField,
   isScriptValueField,
   isVariableField,
@@ -72,12 +79,13 @@ import {
   Trigger,
   Variable,
 } from "shared/lib/resources/types";
-import { uniqBy } from "lodash";
+import uniqBy from "lodash/uniqBy";
 import {
   canMoveFolder,
   reparentEntityPath,
   reparentFolderPath,
 } from "shared/lib/helpers/virtualFilesystem";
+import { isScriptDataTable } from "shared/lib/scriptDataTable/types";
 
 interface NormalizedEntities {
   scenes: Record<EntityId, SceneNormalized>;
@@ -261,6 +269,82 @@ const resourcesSchema = {
   engineFieldValues: engineFieldValuesResourceSchema,
 };
 
+const getArrayItemSchema = (
+  normalizrSchema?: Schema<unknown>,
+): Schema<unknown> | undefined => {
+  if (Array.isArray(normalizrSchema)) {
+    return normalizrSchema[0];
+  }
+  return undefined;
+};
+
+const getObjectSchema = (
+  normalizrSchema?: Schema<unknown>,
+): Record<string, Schema<unknown>> | undefined => {
+  if (!normalizrSchema || Array.isArray(normalizrSchema)) {
+    return undefined;
+  }
+
+  if ("schema" in normalizrSchema) {
+    const childSchema = normalizrSchema.schema;
+
+    if (
+      childSchema &&
+      typeof childSchema === "object" &&
+      !Array.isArray(childSchema)
+    ) {
+      return childSchema as Record<string, Schema<unknown>>;
+    }
+    return undefined;
+  }
+
+  return normalizrSchema as Record<string, Schema<unknown>>;
+};
+
+const getValuesSchema = (
+  normalizrSchema?: Schema<unknown>,
+): Schema<unknown> | undefined => {
+  if (!normalizrSchema || Array.isArray(normalizrSchema)) {
+    return undefined;
+  }
+
+  if ("schema" in normalizrSchema && Array.isArray(normalizrSchema.schema)) {
+    return normalizrSchema.schema;
+  }
+
+  return undefined;
+};
+
+export const pruneMissingEntities = <T>(
+  input: T,
+  normalizrSchema?: Schema<unknown>,
+): T => {
+  if (Array.isArray(input)) {
+    const itemSchema = getArrayItemSchema(normalizrSchema);
+    const result = input.map((item) => pruneMissingEntities(item, itemSchema));
+    if (itemSchema === undefined) {
+      return result as T;
+    }
+    return result.filter((item) => item !== undefined && item !== null) as T;
+  }
+
+  if (input !== null && typeof input === "object") {
+    const objectSchema = getObjectSchema(normalizrSchema);
+    const valuesSchema = getValuesSchema(normalizrSchema);
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+      result[key] = pruneMissingEntities(
+        value,
+        valuesSchema ?? objectSchema?.[key],
+      );
+    }
+
+    return result as T;
+  }
+
+  return input;
+};
+
 export const normalizeEntityResources = (
   projectResources: ProjectEntityResources,
 ): NormalizedData => {
@@ -355,10 +439,9 @@ export const denormalizeEntities = (
       EngineFieldValue
     >,
   };
-  const denormalizedEntities: DenormalizedEntities = denormalize(
-    input,
+  const denormalizedEntities: DenormalizedEntities = pruneMissingEntities(
+    denormalize(input, resourcesSchema, entities),
     resourcesSchema,
-    entities,
   );
 
   const entityToResource =
@@ -441,7 +524,11 @@ export const denormalizeSprite = ({
     spriteAnimations,
     spriteStates,
   };
-  return denormalize(sprite, spriteSheetsSchema, entities);
+
+  return pruneMissingEntities(
+    denormalize(sprite, spriteSheetsSchema, entities),
+    spriteSheetsSchema,
+  );
 };
 
 export const normalizeSprite = (
@@ -461,6 +548,65 @@ export const normalizeSprite = (
 
 const matchAsset = (assetA: Asset) => (assetB: Asset) => {
   return assetA.filename === assetB.filename && assetA.plugin === assetB.plugin;
+};
+
+const assetResourceType = (asset: Asset): string | undefined => {
+  return "_resourceType" in asset && typeof asset._resourceType === "string"
+    ? asset._resourceType
+    : undefined;
+};
+
+const isCompatibleCachedAsset = <T extends Asset & { inode: string }>(
+  incoming: T,
+  cached: Asset | undefined,
+): cached is T => {
+  if (!cached) {
+    return false;
+  }
+
+  if (assetResourceType(cached) !== assetResourceType(incoming)) {
+    return false;
+  }
+
+  if (cached.plugin !== incoming.plugin) {
+    return false;
+  }
+
+  return true;
+};
+
+const hasValidInode = (
+  asset: Asset & { inode?: string },
+): asset is Asset & {
+  inode: string;
+} => {
+  return typeof asset.inode === "string" && asset.inode.length > 0;
+};
+
+const cacheAssetByInode = <T extends Asset & { inode: string }>(asset: T) => {
+  if (!hasValidInode(asset)) {
+    return;
+  }
+
+  inodeToAssetCache[asset.inode] = cloneDeep(asset);
+};
+
+const takeCachedAsset = <T extends Asset & { inode: string }>(
+  entity: T,
+): T | undefined => {
+  if (!hasValidInode(entity)) {
+    return undefined;
+  }
+
+  const cachedAsset = inodeToAssetCache[entity.inode];
+
+  if (!cachedAsset) {
+    return undefined;
+  }
+
+  delete inodeToAssetCache[entity.inode];
+
+  return isCompatibleCachedAsset(entity, cachedAsset) ? cachedAsset : undefined;
 };
 
 const collator = new Intl.Collator(undefined, {
@@ -838,11 +984,9 @@ const mergeAssetEntity = <T extends Asset & { inode: string }>(
 
   // Check if asset already exists or was recently deleted
   const existingAsset =
-    existingEntities.find(matchAsset(entity)) ||
-    inodeToAssetCache[entity.inode];
+    existingEntities.find(matchAsset(entity)) || takeCachedAsset(entity);
 
   if (existingAsset) {
-    delete inodeToAssetCache[entity.inode];
     const preferExisting = pick(existingAsset, keepProps);
 
     return {
@@ -894,7 +1038,7 @@ export const removeAssetEntity = <
   ) as T[];
   const existingAsset = existingEntities.find(matchAsset(asset));
   if (existingAsset) {
-    inodeToAssetCache[existingAsset.inode] = cloneDeep(existingAsset);
+    cacheAssetByInode(existingAsset);
     adapter.removeOne(entities, existingAsset.id);
   }
 };
@@ -923,7 +1067,7 @@ export const renameAssetEntity = <
   ) as T[];
   const existingAsset = existingEntities.find(matchAsset(asset));
   if (existingAsset) {
-    inodeToAssetCache[existingAsset.inode] = cloneDeep(existingAsset);
+    cacheAssetByInode(existingAsset);
     adapter.updateOne(entities, {
       id: existingAsset.id,
       changes: {
@@ -1058,6 +1202,16 @@ export const updateCustomEventArgs = (
             }
           }
         }
+        if (isDataTableField(scriptEvent.command, arg, args, scriptEventDefs)) {
+          const value = isScriptDataTable(args[arg]) ? args[arg] : undefined;
+          if (value) {
+            for (const variable of value.variables) {
+              if (isVariableCustomEvent(variable)) {
+                addVariable(variable);
+              }
+            }
+          }
+        }
       });
       if (args.text || args.expression) {
         let text;
@@ -1134,6 +1288,15 @@ const scriptFixNulls = (script: Script): Script => {
   return { ...script, script: filterEvents(script.script, validScriptEvent) };
 };
 
+const extractEntities = <T extends { id: string }>(
+  ids: readonly string[] | undefined,
+  lookup: Record<string, T | undefined>,
+): T[] => {
+  return (ids ?? [])
+    .map((id) => lookup[id])
+    .filter((entity): entity is T => !!entity);
+};
+
 export const getMetaspriteTilesForSpriteSheet = (
   state: EntitiesState,
   spriteSheetId: string,
@@ -1141,26 +1304,21 @@ export const getMetaspriteTilesForSpriteSheet = (
   const spriteSheet = state.spriteSheets.entities[spriteSheetId];
   if (!spriteSheet) return [];
 
-  const spriteStates = spriteSheet.states.map(
-    (stateId) => state.spriteStates.entities[stateId],
+  const spriteStates = extractEntities(
+    spriteSheet.states,
+    state.spriteStates.entities,
   );
 
   const spriteAnimations = spriteStates.flatMap((spriteState) =>
-    spriteState.animations.map(
-      (animationId) => state.spriteAnimations.entities[animationId],
-    ),
+    extractEntities(spriteState.animations, state.spriteAnimations.entities),
   );
 
   const spriteFrames = spriteAnimations.flatMap((animation) =>
-    animation.frames.map(
-      (metaspriteId) => state.metasprites.entities[metaspriteId],
-    ),
+    extractEntities(animation.frames, state.metasprites.entities),
   );
 
   const spriteTiles = spriteFrames.flatMap((metasprite) =>
-    metasprite.tiles.map(
-      (metaspriteTileId) => state.metaspriteTiles.entities[metaspriteTileId],
-    ),
+    extractEntities(metasprite.tiles, state.metaspriteTiles.entities),
   );
 
   return uniqBy(spriteTiles, "id");

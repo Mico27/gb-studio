@@ -19,6 +19,7 @@ import {
   stat,
   statSync,
   move,
+  writeFile,
 } from "fs-extra";
 import menu, {
   refreshScreenGridMenuItems,
@@ -37,7 +38,11 @@ import createProject, { CreateProjectInput } from "lib/project/createProject";
 import open from "open";
 import confirmEnableColorDialog from "lib/electron/dialog/confirmEnableColorDialog";
 import confirmDeleteCustomEvent from "lib/electron/dialog/confirmDeleteCustomEvent";
-import type { BuildOptions, RecentProjectData } from "renderer/lib/api/setup";
+import type {
+  BuildOptions,
+  ProjectWindowMenuState,
+  RecentProjectData,
+} from "renderer/lib/api/setup";
 import buildProject, {
   cancelCompileStepsInProgress,
 } from "lib/compiler/buildProject";
@@ -59,11 +64,15 @@ import { writeFileWithBackupAsync } from "lib/helpers/fs/writeFileWithBackup";
 import { guardAssetWithinProject } from "lib/helpers/assets";
 import type { Song } from "shared/lib/uge/types";
 import { loadUGESong, saveUGESong } from "shared/lib/uge/ugeHelper";
+import { loadUGIInstrument, saveUGIInstrument } from "shared/lib/uge/ugiHelper";
+import type { UGIInstrument } from "shared/lib/uge/ugiHelper";
+import { loadUGWave, saveUGWave } from "shared/lib/uge/ugwHelper";
 import confirmUnsavedChangesTrackerDialog from "lib/electron/dialog/confirmUnsavedChangesTrackerDialog";
 import type {
   MusicDataPacket,
   MusicDataReceivePacket,
 } from "shared/lib/music/types";
+import { defaultMusicMidiState, MusicMidiState } from "shared/lib/music/midi";
 import { compileFXHammerSingle } from "lib/compiler/sounds/compileFXHammer";
 import { compileWav } from "lib/compiler/sounds/compileWav";
 import { compileVGM } from "lib/compiler/sounds/compileVGM";
@@ -109,6 +118,7 @@ import {
   BackgroundAsset,
   ColorCorrectionSetting,
   ColorModeSetting,
+  Constant,
   MusicResourceAsset,
   ProjectResources,
   Sprite,
@@ -159,12 +169,17 @@ import { monoOverrideForFilename } from "shared/lib/assets/backgrounds";
 import { getMonoTilesImage } from "lib/helpers/getMonoTilesImage";
 import { readFileToIndexedImage } from "lib/tiles/readFileToTiles";
 import { tileDataIndexFn } from "shared/lib/tiles/tileData";
-import { isEqual } from "lodash";
+import isEqual from "lodash/isEqual";
 import { writeIndexedImagePNG } from "lib/helpers/writeIndexedImage";
 import { clearAppCache } from "lib/helpers/cache";
 import { ensureNonEmptyBasename } from "shared/lib/helpers/path";
 import { convertMODDataToUGESong } from "shared/lib/uge/mod2uge/import";
 import confirmConvertModReplaceDialog from "lib/electron/dialog/confirmConvertModDialog";
+import { ScriptDataTable } from "shared/lib/scriptDataTable/types";
+import {
+  csvToScriptDataTable,
+  scriptDataTableToCSV,
+} from "shared/lib/scriptDataTable/csv";
 
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -204,6 +219,9 @@ let projectWindowCloseCancelled = false;
 let keepOpen = false;
 let projectPath = "";
 let musicWindowInitialized = false;
+let midiInputState: MusicMidiState = defaultMusicMidiState;
+let projectWindowNavigationSection: ProjectWindowMenuState["navigationSection"] =
+  "world";
 let debuggerInitData: DebuggerInitData | null = null;
 let stopWatchingFn: (() => void) | null = null;
 let scriptEventHandlers: ScriptEventHandlers = {};
@@ -336,9 +354,9 @@ export const createProjectWindow = async () => {
   projectWindow = new BrowserWindow({
     x: projectWindowState.x,
     y: projectWindowState.y,
-    width: Math.max(640, projectWindowState.width),
+    width: Math.max(900, projectWindowState.width),
     height: Math.max(600, projectWindowState.height),
-    minWidth: 640,
+    minWidth: 900,
     minHeight: 600,
     titleBarStyle: "hiddenInset",
     fullscreenable: true,
@@ -421,6 +439,8 @@ export const createProjectWindow = async () => {
   projectWindow.on("closed", () => {
     projectWindow = null;
     projectPath = "";
+    midiInputState = defaultMusicMidiState;
+    projectWindowNavigationSection = "world";
     refreshMenu();
     if (musicWindow) {
       musicWindow.destroy();
@@ -1218,18 +1238,24 @@ ipcMain.handle("build:delete-cache", async (_event) => {
   await clearAppCache(tmpPath);
 });
 
-ipcMain.handle("project:update-project-window-menu", (_event, settings) => {
-  const {
-    showCollisions,
-    showConnections,
-    showNavigator,
-    showSceneScreenGrid,
-  } = settings;
-  setMenuItemChecked("showCollisions", showCollisions);
-  setMenuItemChecked("showNavigator", showNavigator);
-  refreshShowConnectionsMenuItems(showConnections);
-  refreshScreenGridMenuItems(showSceneScreenGrid);
-});
+ipcMain.handle(
+  "project:update-project-window-menu",
+  (_event, settings: ProjectWindowMenuState) => {
+    const {
+      showCollisions,
+      showConnections,
+      showNavigator,
+      showSceneScreenGrid,
+      navigationSection,
+    } = settings;
+    projectWindowNavigationSection = navigationSection;
+    refreshMenu();
+    setMenuItemChecked("showCollisions", showCollisions);
+    setMenuItemChecked("showNavigator", showNavigator);
+    refreshShowConnectionsMenuItems(showConnections);
+    refreshScreenGridMenuItems(showSceneScreenGrid);
+  },
+);
 
 ipcMain.handle("set-ui-scale", (_, scale: number) => {
   settings.set("zoomLevel", scale);
@@ -1265,6 +1291,11 @@ ipcMain.on("music:data-receive", (_event, data: MusicDataReceivePacket) => {
   if (projectWindow) {
     sendToProjectWindow("music:response", data);
   }
+});
+
+ipcMain.on("music:midi-menu-state", (_event, data: MusicMidiState) => {
+  midiInputState = data;
+  refreshMenu();
 });
 
 ipcMain.on("debugger:data-receive", (_event, data: DebuggerDataPacket) => {
@@ -1768,6 +1799,37 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
+  "data-table:export-csv",
+  async (_event, table: ScriptDataTable, constants: Constant[]) => {
+    const savePath = dialog.showSaveDialogSync({
+      defaultPath: `${table.label || "data"}.csv`,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!savePath) return;
+    const data = scriptDataTableToCSV(table, constants);
+    await writeFile(savePath, data);
+  },
+);
+
+ipcMain.handle(
+  "data-table:import-csv",
+  async (
+    _event,
+    constants: Constant[],
+  ): Promise<ScriptDataTable | undefined> => {
+    const files = dialog.showOpenDialogSync({
+      properties: ["openFile"],
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!files || !files[0]) {
+      return undefined;
+    }
+    const data = await readFile(files[0], "utf8");
+    return csvToScriptDataTable(data, constants);
+  },
+);
+
+ipcMain.handle(
   "tracker:new",
   async (_event, assetPath: string): Promise<MusicResourceAsset> => {
     const projectRoot = Path.dirname(projectPath);
@@ -1873,6 +1935,55 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle(
+  "tracker:export-instrument",
+  async (_event, instrument: UGIInstrument) => {
+    const savePath = dialog.showSaveDialogSync({
+      defaultPath: `${instrument.name || "instrument"}.ugi`,
+      filters: [{ name: "hUGETracker Instruments", extensions: ["ugi"] }],
+    });
+    if (!savePath) return;
+    const data = saveUGIInstrument(instrument);
+    await writeFile(savePath, data);
+  },
+);
+
+ipcMain.handle(
+  "tracker:import-instrument",
+  async (): Promise<UGIInstrument | null> => {
+    const files = dialog.showOpenDialogSync({
+      properties: ["openFile"],
+      filters: [{ name: "hUGETracker Instruments", extensions: ["ugi"] }],
+    });
+    if (!files || !files[0]) return null;
+    const data = await readFile(files[0]);
+    return loadUGIInstrument(data);
+  },
+);
+
+ipcMain.handle(
+  "tracker:export-wave",
+  async (_event, wave: number[], suggestedName: string) => {
+    const savePath = dialog.showSaveDialogSync({
+      defaultPath: `${suggestedName || "wave"}.ugw`,
+      filters: [{ name: "hUGETracker Waves", extensions: ["ugw"] }],
+    });
+    if (!savePath) return;
+    const data = saveUGWave(new Uint8Array(wave));
+    await writeFile(savePath, data);
+  },
+);
+
+ipcMain.handle("tracker:import-wave", async (): Promise<number[] | null> => {
+  const files = dialog.showOpenDialogSync({
+    properties: ["openFile"],
+    filters: [{ name: "hUGETracker Waves", extensions: ["ugw"] }],
+  });
+  if (!files || !files[0]) return null;
+  const data = await readFile(files[0]);
+  return Array.from(loadUGWave(data));
+});
+
 ipcMain.handle("sfx:play-wav", async (_event, assetPath: string) => {
   const projectRoot = Path.dirname(projectPath);
   const filename = Path.join(projectRoot, assetPath);
@@ -1941,7 +2052,7 @@ ipcMain.handle("music:play-uge", async (_event, assetPath: string) => {
   createMusic(undefined, {
     action: "play",
     song: data,
-    position: [0, 0],
+    position: { sequence: 0, row: 0 },
   });
 });
 
@@ -1964,7 +2075,7 @@ ipcMain.handle(
     createMusic(undefined, {
       action: "play",
       song: data,
-      position: [0, 0],
+      position: { sequence: 0, row: 0 },
     });
   },
 );
@@ -2195,6 +2306,16 @@ menu.on("updateTheme", (value) => {
   refreshTheme();
 });
 
+menu.on("toggleMidiInput", () => {
+  sendToProjectWindow("menu:midi-input-toggle");
+});
+
+menu.on("selectMidiInput", (value) => {
+  if (typeof value === "string") {
+    sendToProjectWindow("menu:midi-input-select", value);
+  }
+});
+
 menu.on("updateLocale", (value) => {
   settings.set(LOCALE_SETTING_KEY, value as JsonValue);
   setMenuItemChecked("localeDefault", value === undefined);
@@ -2299,6 +2420,10 @@ const refreshMenu = () => {
   menu.buildMenu({
     themeManager,
     l10nManager,
+    midiInputState,
+    midiInputAvailable: !!projectWindow,
+    midiInputVisible:
+      !!projectWindow && projectWindowNavigationSection === "music",
   });
 };
 

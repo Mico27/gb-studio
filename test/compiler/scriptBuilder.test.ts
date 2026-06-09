@@ -289,6 +289,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Hello World"
         VM_DISPLAY_TEXT
@@ -353,6 +354,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Hello"
         VM_DISPLAY_TEXT
@@ -518,6 +520,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Goodbye World"
         VM_DISPLAY_TEXT
@@ -532,6 +535,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Hello World"
         VM_DISPLAY_TEXT
@@ -619,6 +623,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "0=FALSE 2=FALSE"
         VM_DISPLAY_TEXT
@@ -633,6 +638,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "0=FALSE 2=TRUE"
         VM_DISPLAY_TEXT
@@ -651,6 +657,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "0=TRUE 1=FALSE"
         VM_DISPLAY_TEXT
@@ -665,6 +672,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "0=TRUE 1=TRUE"
         VM_DISPLAY_TEXT
@@ -3085,6 +3093,109 @@ test("should allow pass by value between multiple scripts", async () => {
   );
 });
 
+test("Should compile variable data table lookups into data table output", async () => {
+  const { sb } = await createTestScriptBuilder();
+
+  sb.variableDataTableLookup("0", {
+    variables: ["1", "2"],
+    rows: [
+      {
+        label: "Alpha",
+        values: [
+          { type: "number", value: 10 },
+          { type: "number", value: 20 },
+        ],
+      },
+      {
+        label: "Beta",
+        values: [{ type: "number", value: 30 }, undefined],
+      },
+    ],
+  });
+  sb._packLocals();
+
+  const script = sb.toScriptString("DATA_TABLE_SCRIPT", false);
+
+  expect(script).toContain("        ; Variable Data Table");
+  expect(script).toContain("data_table:");
+  expect(script).toContain("\t; Alpha\n\t.dw 10, 20");
+  expect(script).toContain("\t; Beta\n\t.dw 30, 0");
+  expect(script).toContain("VAR_VARIABLE_0");
+  expect(script).toContain("VAR_VARIABLE_1");
+  expect(script).toContain("VAR_VARIABLE_2");
+});
+
+test("Should remap custom event variable arguments used in data table columns", async () => {
+  const output: string[] = [];
+  const additionalScripts: Record<
+    string,
+    {
+      symbol: string;
+      compiledScript: string;
+    }
+  > = {};
+  const scriptEventHandlers = await getTestScriptHandlers();
+
+  const sb = new ScriptBuilder(output, {
+    scriptEventHandlers,
+    additionalScripts,
+    scene: {
+      id: "scene1",
+      hash: "scene1",
+      actors: [{ ...dummyActorNormalized, id: "actorS0A0" }],
+    } as unknown as PrecompiledScene,
+    customEvents: [
+      {
+        id: "script1",
+        name: "Script 1",
+        description: "",
+        variables: {
+          V0: {
+            id: "V0",
+            name: "Variable A",
+            passByReference: false,
+          },
+        },
+        actors: {},
+        symbol: "script_1",
+        script: [
+          {
+            command: "EVENT_DATA_TABLE",
+            args: {
+              indexVariable: "0",
+              data: {
+                variables: ["V0", "1"],
+                rows: [
+                  {
+                    label: "Row 1",
+                    values: [
+                      { type: "number", value: 5 },
+                      { type: "number", value: 6 },
+                    ],
+                  },
+                ],
+              },
+            },
+            id: "event1",
+          },
+        ],
+      },
+    ],
+  } as unknown as ScriptBuilderOptions);
+
+  sb.callScript("script1", {
+    "$variable[V0]$": "2",
+  });
+
+  expect(output).toContain("        VM_PUSH_VALUE           VAR_VARIABLE_2");
+  expect(additionalScripts["script_1"]?.compiledScript).toContain(
+    "VAR_VARIABLE_1",
+  );
+  expect(additionalScripts["script_1"]?.compiledScript).toContain(
+    ".SCRIPT_ARG_0_VARIABLE",
+  );
+});
+
 test("should allow pass by reference of script value between multiple scripts", async () => {
   const output: string[] = [];
   const additionalScripts: Record<
@@ -4503,6 +4614,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Hello World"
         VM_DISPLAY_TEXT
@@ -4545,6 +4657,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            1
         .dw VAR_VARIABLE_42
         .asciz "Hello World %d"
@@ -4602,6 +4715,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            1
         .dw .SCRIPT_ARG_0_VARIABLE
         .asciz "Hello World %d"
@@ -4660,6 +4774,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_GET_INDIRECT         .LOCAL_TMP0_TEXT_ARG0, .SCRIPT_ARG_0_VARIABLE
         VM_LOAD_TEXT            1
         .dw .LOCAL_TMP0_TEXT_ARG0
@@ -4728,6 +4843,7 @@ _MY_SCRIPT::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_GET_INDIRECT         .LOCAL_TMP0_TEXT_ARG0, .SCRIPT_ARG_1_VARIABLE
         VM_LOAD_TEXT            2
         .dw .SCRIPT_ARG_0_VARIABLE, .LOCAL_TMP0_TEXT_ARG0
@@ -4855,6 +4971,7 @@ _script1::
         VM_OVERLAY_MOVE_TO      0, 18, .OVERLAY_SPEED_INSTANT
         VM_OVERLAY_MOVE_TO      0, 14, .OVERLAY_IN_SPEED
         VM_OVERLAY_SET_SCROLL   1, 1, 18, 5, .UI_COLOR_WHITE
+        VM_SWITCH_TEXT_LAYER    .TEXT_LAYER_WIN
         VM_LOAD_TEXT            0
         .asciz "Hello World"
         VM_DISPLAY_TEXT

@@ -15,6 +15,7 @@ import editorActions from "store/features/editor/editorActions";
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import { constantName } from "shared/lib/entities/entitiesHelpers";
 import { StyledScriptEventBranchHeader } from "ui/scripting/style";
+import { SingleValue } from "react-select";
 
 interface ConstantSelectProps extends SelectCommonProps {
   id?: string;
@@ -24,7 +25,7 @@ interface ConstantSelectProps extends SelectCommonProps {
   onChange: (newValue: string) => void;
 }
 
-const ConstantSelectWrapper = styled.div`
+export const ConstantSelectWrapper = styled.div`
   position: relative;
   width: 100%;
   min-width: 78px;
@@ -265,7 +266,7 @@ export const ConstantSelect: FC<ConstantSelectProps> = ({
         <Select
           value={currentValue}
           options={options}
-          onChange={(newValue) => {
+          onChange={(newValue: SingleValue<Option>) => {
             if (newValue) {
               onChange(newValue.value);
             }

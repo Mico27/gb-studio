@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.3.0] - 2026-06-08
 
 ### Added
 
@@ -24,10 +24,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add ability to test multiple octaves for instruments in sidebar
 - Add step selection to tracker toolbar in Music Editor
 - Add ability to export songs from the Music Editor as MP3, FLAC, or WAV
+- Add ability to import/export instruments and waveforms in the Music Editor (compatible with hUGETracker .ugi/.ugw)
+- Add 'Script' editor view for editing instrument subpatterns in the Music Editor, similar to event scripts
+- Add optional onscreen keyboard for Tracker view in Music Editor
+- Add presets for instrument subpatterns in the Music Editor
+- Add ability to use MIDI input in Music Editor. Record button will appear to set if MIDI input should edit song or just preview notes. Piano Roll view also allows recording during playback with optional metronome and quantizing options
+- Add ability to clone current pattern and to insert any pattern before/after in Music Editor from Order bar context menu
+- Add ability to loop playback of a single pattern in the Music Editor
+- Add support for split patterns in the Music Editor, allowing different patterns to be set per channel
+- Add note sustain previews to Piano Roll view
+- Add ability to view current tracker keyboard layout (accessible in Preferences window in main app, and in menu `Input / Tracker Keyboard Layout` on music web app)
+- Add ability to read camera scroll x/y within script values [@pau-tomas](https://github.com/pau-tomas)
+- Add ability to set all four available palettes for SGB games [@pau-tomas](https://github.com/pau-tomas)
+- Add "Set Super GB Color Area" event to allow setting where each color palette should be used in SGB games [@pau-tomas](https://github.com/pau-tomas)
+- Add "Set Super GB Palettes" event for changing SGB palettes from scripts [@pau-tomas](https://github.com/pau-tomas)
+- Add "Data Table Lookup" event for reading static data from a table using an index variable, with CSV import/export. Useful for lookups like monster stats
 - Ukrainian localisation. [@AmakerGame](https://github.com/AmakerGame)
 
 ### Changed
 
+- Update to latest [GBVM](https://github.com/chrismaltby/gbvm)
 - Improve warning messages when multiple engine plugins modify the same files.
 - Clear build cache on the first build after opening a project to prevent stale data issues
 - Preserve scroll position in the Settings section when navigating away and returning
@@ -37,10 +53,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Music Editor now centres the piano roll on C5 when opening a file
 - Updated Polish localisation. [@ReptiIe](https://github.com/ReptiIe)
 - Updated Japanese localisation. [@tomo666](https://github.com/tomo666)
-- Piano Roll view in the Music Editor now displays the full song at once
+- Music Editor now displays the full song at once
 - Patterns in the Music Editor are now color-coded to improve organisation
 - Notes in the Piano Roll without an instrument now use the previously set instrument color with a striped pattern
 - Editing or changing instruments in the Music Editor now plays a preview note
+- Music Editor now includes right click context menus allowing access to transpose, interpolate and copy/paste options
+- Piano roll view now highlights rows with sharp notes
+- Smoother playhead movement and auto-scrolling in the Piano Roll view
+- Compiled music no longer includes unused instrument subpatterns
+- Plugins can now specify `preserveFiles` to prevent files from being overwritten when updated in the Plugin Manager
+- Themes plugins can now set `tracker.wave`, `tracker.waveGrid` and `tracker.waveBackground` colors [@pau-tomas](https://github.com/pau-tomas)
+- Setting ROM filename to end with ".gb" will now cause that extension to be used for GBC-only games instead of ".gbc"
 
 ### Fixed
 
@@ -51,6 +74,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed issue where loading a new song retained the previous song's mute state
 - Fixed issue where the Music Editor would not automatically display the first song if it was a `.mod` file
 - Fix issue where "Test Instrument" in Music Editor would not work if instrument's channel was muted
+- Fix issue where renaming a scene could prevent selecting text in the name field
+- Fix issue in asset navigators where folders could incorrectly show files as being within folders if filename matched the folder name
+- Fix issue in song navigator where keyboard navigation could stop working
+- Fix BPM label calculation in Music Editor
+- Fix issue where Select All could stop working in Tracker view
+- Fix issue where multiple context menus could be opened at once
+- Fix issue where colors could appear differently in palette editor to how they appear in game
+- Fix issue where changing one color in a palette could also slightly change the other colors
+- Fix issue where palette editor sliders were not updating after undo and redo
+- Fix issue where "Play Sound Effect" event was using deprecated wait function
+- Fix issue where using Dialogue or Menu events while using Draw Text could cause dialogue text to be drawn to the background
+- Fix 'sprite:compile' error by removing invalid state data before compiling sprites
+- Fix issue where navigating app sections with the keyboard could prevent the Paste shortcut from working
+- Fix issue where it was possible to create an animation state with a blank name which could no longer renamed
+- Fix issue where keyboard controls wouldn't always work in sprite animations navigator
+- Fix issue where double clicking a recent project from the splash window could cause project not to open
+- Fix Linux AppImage releases missing icons and metadata needed for integration using AppImageLauncher
+- Fix scene loading when it interrupts a camera shake event [@Phidias618](https://github.com/Phidias618)
+- Fix screenshake from removing projectiles [@Mico27](https://github.com/Mico27)
+- Fix brief text glitch that would appear when drawing dialogue frame on CGB [@Phidias618](https://github.com/Phidias618)
+- Fix player detecting itself instead of another actor when the player has on player hit scripts [@Mico27](https://github.com/Mico27)
+- Fix issue where platformer was reusing coyote timer for wall jump leading to cases where jumping after leaving a ledge would cause a large push forwards
+- Fix issue where jump state wasn't decreasing wall jump coyote timer
+- Fix issue where disabling player collisions wouldn't prevent projectiles from colliding with player
+- Fix issue in platformer scenes where drop through feature can allow phasing through solid walls
+
+### Removed
+
+- Removed mod2gbt binary which is no longer used as .mod files now get converted to .uge format at compile time
 
 ## [4.2.2] - 2026-02-24
 

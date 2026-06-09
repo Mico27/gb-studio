@@ -10,6 +10,14 @@ export type DeepReadonly<T> = {
     : T[Key];
 };
 
+export type Tuple<
+  T,
+  N extends number,
+  R extends unknown[] = [],
+> = R["length"] extends N ? R : Tuple<T, N, [T, ...R]>;
+
+export type MaybePromise<T> = T | Promise<T>;
+
 /* KeysMatching<T, V>
  *
  * Find all keys in T which have the type V
