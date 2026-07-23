@@ -23,7 +23,10 @@ export const enginesRoot = normalize(`${rootDir}/appData/engine`);
 export const defaultEngineRoot = normalize(`${enginesRoot}/gbvm`);
 export const defaultEngineMetaPath = normalize(`${enginesRoot}/engine.json`);
 export const buildToolsRoot = normalize(`${rootDir}/buildTools`);
-export const binjgbRoot = normalize(`${rootDir}/appData/wasm/binjgb`);
+export const binjgbWasmRoot = normalize(`${rootDir}/appData/wasm/binjgb`);
+export const defaultWebTemplateRoot = normalize(
+  `${rootDir}/appData/webTemplates/binjgb`,
+);
 export const projectTemplatesRoot = normalize(`${rootDir}/appData/templates`);
 export const musicTemplatesRoot = normalize(`${rootDir}/appData/music`);
 export const localesRoot = normalize(`${rootDir}/src/lang`);
@@ -45,11 +48,15 @@ export const EMULATOR_MUTED_SETTING_KEY = "emulatorMuted";
 export const NUM_SUBPIXEL_BITS = 5;
 
 // Scene Limits
+export const MAX_SCENE_TILE_COUNT = 16380;
 export const MAX_ACTORS = 20;
 export const MAX_ACTORS_SMALL = 10;
 export const MAX_TRIGGERS = 30;
 export const MAX_ONSCREEN = 10;
 export const MAX_PROJECTILES = 5;
+
+export const MIN_WORLD_ENTITY_X = 60;
+export const MIN_WORLD_ENTITY_Y = 30;
 
 // Background Limits
 export const MAX_BACKGROUND_TILES = 16 * 12;
@@ -64,6 +71,10 @@ export const SCREEN_WIDTH_PX = SCREEN_WIDTH * TILE_SIZE;
 export const SCREEN_HEIGHT_PX = SCREEN_HEIGHT * TILE_SIZE;
 
 export const SCENE_MAX_SIZE_PX = 2040;
+
+// Background tile allocation
+export const TILE_FIRST_CHUNK_SIZE = 128;
+export const TILE_BANK_SIZE = 192;
 
 // Scripts
 export const MAX_NESTED_SCRIPT_DEPTH = 5;
@@ -87,6 +98,7 @@ export const TOOL_SCENE = "scene";
 export const TOOL_TRIGGERS = "triggers";
 export const TOOL_ERASER = "eraser";
 export const TOOL_NOTE = "note";
+export const TOOL_TILES = "tiles";
 
 // Brushes
 export const BRUSH_8PX = "8px";
@@ -94,6 +106,7 @@ export const BRUSH_16PX = "16px";
 export const BRUSH_FILL = "fill";
 export const BRUSH_MAGIC = "magic";
 export const BRUSH_SLOPE = "slope";
+export const BRUSH_SELECTION = "selection";
 
 // Collisions
 export const COLLISIONS_EXTRA_SYMBOLS = "89ABCDEF";
@@ -132,6 +145,7 @@ export const TILE_COLOR_PROPS = 0xf8;
 export const TILE_COLOR_PROP_FLIP_HORIZONTAL = 0x20;
 export const TILE_COLOR_PROP_FLIP_VERTICAL = 0x40;
 export const TILE_COLOR_PROP_PRIORITY = 0x80;
+export const TILE_DEFAULT_UNSET = -1;
 export const DMG_PALETTE = {
   id: "dmg",
   name: "DMG (GB Default)",
@@ -333,6 +347,8 @@ export const defaultProjectSettings: Settings = {
   defaultSceneTypeId: "TOPDOWN",
   disabledSceneTypeIds: [],
   autoTileFlipEnabled: true,
+  webTemplate: "",
+  selectedSceneTilesetId: "",
 };
 
 export const defaultPalettes: Palette[] = [

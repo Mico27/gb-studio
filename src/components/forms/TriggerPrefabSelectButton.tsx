@@ -1,7 +1,7 @@
-import React, { FC, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import l10n from "shared/lib/lang/l10n";
-import { triggerPrefabSelectors } from "store/features/entities/entitiesState";
+import { triggerPrefabSelectors } from "store/features/entities/entitiesSelectors";
 import { SelectMenu, selectMenuStyleProps } from "ui/form/Select";
 import { RelativePortal } from "ui/layout/RelativePortal";
 import { useAppSelector } from "store/hooks";
@@ -48,11 +48,11 @@ const ButtonCover = styled.div`
   height: 60px;
 `;
 
-export const TriggerPrefabSelectButton: FC<TriggerPrefabSelectButtonProps> = ({
+const TriggerPrefabSelectButtonComponent = ({
   name,
   value,
   onChange,
-}) => {
+}: TriggerPrefabSelectButtonProps) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const prefab = useAppSelector((state) =>
@@ -163,3 +163,7 @@ export const TriggerPrefabSelectButton: FC<TriggerPrefabSelectButtonProps> = ({
     </Wrapper>
   );
 };
+
+export const TriggerPrefabSelectButton = memo<TriggerPrefabSelectButtonProps>(
+  TriggerPrefabSelectButtonComponent,
+);

@@ -70,8 +70,8 @@
     "group": "gold"
   },
   {
-    "login": "Italo-Soares-Tradutor",
-    "html_url": "https://github.com/Italo-Soares-Tradutor",
+    "login": "crutchcorn",
+    "html_url": "https://github.com/crutchcorn",
     "group": "gold"
   },
   {
@@ -80,8 +80,8 @@
     "group": "gold"
   },
   {
-    "login": "crutchcorn",
-    "html_url": "https://github.com/crutchcorn",
+    "login": "Italo-Soares-Tradutor",
+    "html_url": "https://github.com/Italo-Soares-Tradutor",
     "group": "gold"
   },
   {
@@ -95,6 +95,11 @@
     "group": "silver"
   },
   {
+    "login": "wcxu21",
+    "html_url": "https://github.com/wcxu21",
+    "group": "silver"
+  },
+  {
     "login": "Pomdap",
     "html_url": "https://github.com/Pomdap",
     "group": "silver"
@@ -102,11 +107,6 @@
   {
     "login": "WAUthethird",
     "html_url": "https://github.com/WAUthethird",
-    "group": "silver"
-  },
-  {
-    "login": "wcxu21",
-    "html_url": "https://github.com/wcxu21",
     "group": "silver"
   },
   {
@@ -200,63 +200,18 @@
     "group": "silver"
   },
   {
+    "login": "AmakerGame",
+    "html_url": "https://github.com/AmakerGame",
+    "group": "silver"
+  },
+  {
     "login": "Cobradabest",
     "html_url": "https://github.com/Cobradabest",
     "group": "silver"
   },
   {
-    "login": "r3vit",
-    "html_url": "https://github.com/r3vit",
-    "group": "silver"
-  },
-  {
-    "login": "npckc",
-    "html_url": "https://github.com/npckc",
-    "group": "silver"
-  },
-  {
-    "login": "john-lay",
-    "html_url": "https://github.com/john-lay",
-    "group": "silver"
-  },
-  {
-    "login": "pblca",
-    "html_url": "https://github.com/pblca",
-    "group": "silver"
-  },
-  {
-    "login": "bbbbbr",
-    "html_url": "https://github.com/bbbbbr",
-    "group": "silver"
-  },
-  {
-    "login": "asiekierka",
-    "html_url": "https://github.com/asiekierka",
-    "group": "silver"
-  },
-  {
-    "login": "wbrawner",
-    "html_url": "https://github.com/wbrawner",
-    "group": "silver"
-  },
-  {
-    "login": "takutok",
-    "html_url": "https://github.com/takutok",
-    "group": "silver"
-  },
-  {
-    "login": "spenserblack",
-    "html_url": "https://github.com/spenserblack",
-    "group": "silver"
-  },
-  {
-    "login": "kresp0",
-    "html_url": "https://github.com/kresp0",
-    "group": "silver"
-  },
-  {
-    "login": "SalvatoreTosti",
-    "html_url": "https://github.com/SalvatoreTosti",
+    "login": "RYU-N2001",
+    "html_url": "https://github.com/RYU-N2001",
     "group": "silver"
   },
   {
@@ -265,8 +220,58 @@
     "group": "silver"
   },
   {
-    "login": "RYU-N2001",
-    "html_url": "https://github.com/RYU-N2001",
+    "login": "SalvatoreTosti",
+    "html_url": "https://github.com/SalvatoreTosti",
+    "group": "silver"
+  },
+  {
+    "login": "kresp0",
+    "html_url": "https://github.com/kresp0",
+    "group": "silver"
+  },
+  {
+    "login": "spenserblack",
+    "html_url": "https://github.com/spenserblack",
+    "group": "silver"
+  },
+  {
+    "login": "takutok",
+    "html_url": "https://github.com/takutok",
+    "group": "silver"
+  },
+  {
+    "login": "wbrawner",
+    "html_url": "https://github.com/wbrawner",
+    "group": "silver"
+  },
+  {
+    "login": "asiekierka",
+    "html_url": "https://github.com/asiekierka",
+    "group": "silver"
+  },
+  {
+    "login": "bbbbbr",
+    "html_url": "https://github.com/bbbbbr",
+    "group": "silver"
+  },
+  {
+    "login": "pblca",
+    "html_url": "https://github.com/pblca",
+    "group": "silver"
+  },
+  {
+    "login": "john-lay",
+    "html_url": "https://github.com/john-lay",
+    "group": "silver"
+  },
+  {
+    "login": "npckc",
+    "html_url": "https://github.com/npckc",
+    "group": "silver"
+  },
+  {
+    "login": "r3vit",
+    "html_url": "https://github.com/r3vit",
     "group": "silver"
   },
   {
@@ -285,6 +290,11 @@
     "group": "silver"
   },
   {
+    "login": "lkcampbell",
+    "html_url": "https://github.com/lkcampbell",
+    "group": "silver"
+  },
+  {
     "login": "laetemn",
     "html_url": "https://github.com/laetemn",
     "group": "silver"
@@ -295,18 +305,13 @@
     "group": "silver"
   },
   {
-    "login": "Hellscaped",
-    "html_url": "https://github.com/Hellscaped",
+    "login": "thrailkillr",
+    "html_url": "https://github.com/thrailkillr",
     "group": "silver"
   },
   {
     "login": "gmarty",
     "html_url": "https://github.com/gmarty",
-    "group": "silver"
-  },
-  {
-    "login": "AmakerGame",
-    "html_url": "https://github.com/AmakerGame",
     "group": "silver"
   },
   {

@@ -11,7 +11,7 @@ import {
   spriteSheetSelectors,
   emoteSelectors,
   constantSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import keyBy from "lodash/keyBy";
 import {
   actorName,
@@ -23,7 +23,7 @@ import { ActorNormalized } from "shared/lib/entities/entitiesTypes";
 import { selectScriptEventDefs } from "store/features/scriptEventDefs/scriptEventDefsState";
 import API from "renderer/lib/api";
 import { replaceAutoLabelLocalValues } from "shared/lib/scripts/autoLabel";
-import { ScriptEditorContext } from "components/script/ScriptEditorContext";
+import { ScriptEditorContext } from "components/script/context/ScriptEditorContext";
 
 const customEventActorsLookup = keyBy(
   Array.from(Array(10).keys()).map((i) => ({

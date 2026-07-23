@@ -8,7 +8,7 @@ import {
   soundSelectors,
   spriteSheetSelectors,
   tilesetSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import { Asset, AssetType } from "shared/lib/helpers/assets";
 import { assertUnreachable } from "shared/lib/helpers/assert";
 
@@ -25,9 +25,6 @@ const projectMiddleware: Middleware<Dispatch, RootState> =
       await API.app.showProjectWindow();
 
       actions.loadProject(action.payload)(store.dispatch, store.getState, {});
-    } else if (actions.addFileToProject.match(action)) {
-      const filename = action.payload;
-      API.project.addFile(filename);
     }
 
     const renameAsset = async <T extends Asset>(

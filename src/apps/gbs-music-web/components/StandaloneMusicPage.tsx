@@ -15,26 +15,26 @@ import {
   SplitPaneVerticalDivider,
 } from "ui/splitpane/SplitPaneDivider";
 import editorActions from "store/features/editor/editorActions";
-import { SongEditor } from "components/music/sidebar/SongEditor";
+import { SongInspector } from "components/music/inspector/SongInspector";
 import { loadSongFile } from "store/features/trackerDocument/trackerDocumentState";
 import { clampSidebarWidth } from "renderer/lib/window/sidebar";
 import trackerActions from "store/features/tracker/trackerActions";
 import { sortByFilename } from "shared/lib/entities/entitiesHelpers";
-import { musicSelectors } from "store/features/entities/entitiesState";
+import { musicSelectors } from "store/features/entities/entitiesSelectors";
 import { useAppDispatch, useAppSelector } from "store/hooks";
-import { NavigatorInstrumentsPane } from "components/music/navigator/NavigatorInstrumentsPane";
-import { NavigatorSongsPane } from "components/music/navigator/NavigatorSongsPane";
+import { InstrumentNavigatorPane } from "components/music/navigator/InstrumentNavigatorPane";
+import { SongNavigatorPane } from "components/music/navigator/SongNavigatorPane";
 import SplitPaneVerticalContainer, {
   SplitPaneLayout,
 } from "ui/splitpane/SplitPaneVerticalContainer";
-import { NavigatorChannelsPane } from "components/music/navigator/NavigatorChannelsPane";
+import { ChannelNavigatorPane } from "components/music/navigator/ChannelNavigatorPane";
 import SongDocument from "components/music/SongDocument";
 import { SequenceEditor } from "components/music/sequence/SequenceEditor";
 import l10n from "shared/lib/lang/l10n";
 import { SplitPaneHeader } from "ui/splitpane/SplitPaneHeader";
-import { InstrumentEditor } from "components/music/sidebar/InstrumentEditor";
+import { InstrumentProperties } from "components/music/inspector/instruments/InstrumentProperties";
 import SongEditorToolsPanel from "components/music/toolbar/SongEditorToolsPanel";
-import { PatternCellSelectionEditor } from "components/music/sidebar/PatternCellSelectionEditor";
+import { PatternCellSelectionProperties } from "components/music/inspector/patterns/PatternCellSelectionProperties";
 import { MusicWebChannelsBar } from "gbs-music-web/components/MusicWebChannelsBar";
 import { MusicWebChannelPane } from "gbs-music-web/components/MusicWebChannelPane";
 import { MusicWebSettingPane } from "gbs-music-web/components/MusicWebSettingsPane";
@@ -132,7 +132,7 @@ const StandaloneMusicPage = ({
   }, [song]);
 
   const viewSongId = useMemo(
-    () => song?.id || lastSongId.current || allSortedSongs[0]?.id,
+    () => song?.id || lastSongId.current || allSortedSongs[0]?.id || "",
     [allSortedSongs, song],
   );
 
@@ -303,7 +303,7 @@ const StandaloneMusicPage = ({
 
   const songsPane = useMemo(
     () => (
-      <NavigatorSongsPane
+      <SongNavigatorPane
         modified={modified}
         selectedSongId={viewSongId}
         onCreateSong={onCreateSong}
@@ -349,15 +349,15 @@ const StandaloneMusicPage = ({
                 defaultLayout={defaultPaneLayout}
               >
                 {songsPane}
-                {viewSong.type === "uge" ? <NavigatorChannelsPane /> : null}
-                {viewSong.type === "uge" ? <NavigatorInstrumentsPane /> : null}
+                {viewSong?.type === "uge" ? <ChannelNavigatorPane /> : null}
+                {viewSong?.type === "uge" ? <InstrumentNavigatorPane /> : null}
               </SplitPaneVerticalContainer>
             </div>
           </div>
           <SplitPaneHorizontalDivider onMouseDown={startLeftPaneResize} />
         </>
       )}
-      {viewSong.type === "uge" && (
+      {viewSong?.type === "uge" && (
         <>
           <div
             id="song-document"
@@ -447,7 +447,7 @@ const StandaloneMusicPage = ({
                 >
                   <CaretUpIcon />
                 </StyledMobileBackButton>
-                <InstrumentEditor offsetHeader />
+                <InstrumentProperties offsetHeader />
               </MobileOverlay>
 
               <MobileOverlay
@@ -493,7 +493,7 @@ const StandaloneMusicPage = ({
                   setMobileOverlayView("none");
                 }}
               >
-                <PatternCellSelectionEditor />
+                <PatternCellSelectionProperties />
               </MobileOverlay>
             </>
           )}
@@ -512,7 +512,7 @@ const StandaloneMusicPage = ({
                   flexShrink: 0,
                 }}
               >
-                {status === "loaded" && <SongEditor />}
+                {status === "loaded" && <SongInspector />}
               </div>
             </>
           )}

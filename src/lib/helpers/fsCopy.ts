@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import fs from "fs-extra";
 import Path from "path";
 
@@ -27,7 +26,7 @@ const copyFile = async (
       } else {
         return;
       }
-    } catch (e) {
+    } catch {
       // Didn't exist so copy it
     }
     if (throwAlreadyExists) {

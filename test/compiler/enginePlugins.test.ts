@@ -4,12 +4,13 @@ import { PluginMetadata } from "lib/pluginManager/types";
 import { isFilePathWithinFolder } from "lib/helpers/path";
 import { pathToPosix } from "shared/lib/helpers/path";
 import l10n from "shared/lib/lang/l10n";
-import glob from "glob";
+import { glob } from "lib/helpers/glob";
 import {
   selectAlternateEngine,
   applyPatchToFile,
   isPatchFile,
   collectPatchFiles,
+  buildSortedEnginePluginList,
   applyPatches,
   warnOnPluginFileCollisions,
 } from "lib/compiler/enginePlugins";
@@ -18,9 +19,12 @@ import { dummyPluginMetadata } from "../dummydata";
 jest.mock("fs-extra");
 jest.mock("diff");
 jest.mock("lib/helpers/path");
-jest.mock("shared/lib/helpers/path");
+jest.mock("shared/lib/helpers/path", () => ({
+  ...jest.requireActual("shared/lib/helpers/path"),
+  pathToPosix: jest.fn(),
+}));
 jest.mock("shared/lib/lang/l10n");
-jest.mock("glob");
+jest.mock("lib/helpers/glob");
 
 const mockedFs = fs as jest.Mocked<typeof fs> & {
   readFile: jest.Mock;
@@ -33,7 +37,7 @@ const mockedPathToPosix = pathToPosix as jest.MockedFunction<
   typeof pathToPosix
 >;
 const mockedL10n = l10n as jest.MockedFunction<typeof l10n>;
-const mockedGlob = glob as jest.Mocked<typeof glob>;
+const mockedGlob = glob as jest.MockedFunction<typeof glob>;
 
 describe("selectAlternateEngine", () => {
   const enginePluginPath = "/project/plugins/my-plugin/engine";
@@ -904,6 +908,31 @@ describe("isPatchFile", () => {
   });
 });
 
+describe("buildSortedEnginePluginList", () => {
+  const pluginsPath = "/project/plugins";
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("It should use plugin name as a deterministic tie-breaker", async () => {
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/plugin-c/engine",
+      "/project/plugins/plugin-a/engine",
+      "/project/plugins/plugin-b/engine",
+    ]);
+    mockedFs.readJSON.mockResolvedValue({ order: 1 } as never);
+
+    const enginePlugins = await buildSortedEnginePluginList(pluginsPath);
+
+    expect(enginePlugins.map((plugin) => plugin.pluginName)).toEqual([
+      "plugin-a",
+      "plugin-b",
+      "plugin-c",
+    ]);
+  });
+});
+
 describe("collectPatchFiles", () => {
   const usedEnginePluginPath = "/project/plugins/my-plugin/engine";
   const unusedFiles = ["src/unused.c", "include/unused.h"];
@@ -914,25 +943,17 @@ describe("collectPatchFiles", () => {
   });
 
   test("It should collect patch files from directory", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [
-          "/project/plugins/my-plugin/engine/src/core.c.patch",
-          "/project/plugins/my-plugin/engine/src/utils.c.patch",
-        ]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src/core.c.patch",
+      "/project/plugins/my-plugin/engine/src/utils.c.patch",
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, []);
 
-    expect(mockedGlob).toHaveBeenCalledWith(
-      "**/*.patch",
-      {
-        cwd: usedEnginePluginPath,
-        absolute: true,
-      },
-      expect.any(Function),
-    );
+    expect(mockedGlob).toHaveBeenCalledWith("**/*.patch", {
+      cwd: usedEnginePluginPath,
+      absolute: true,
+    });
     expect(patches).toHaveLength(2);
     expect(patches[0]).toEqual({
       abs: "/project/plugins/my-plugin/engine/src/core.c.patch",
@@ -945,28 +966,20 @@ describe("collectPatchFiles", () => {
   });
 
   test("It should exclude patches targeting unused files", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [
-          "/project/plugins/my-plugin/engine/src/used.c.patch",
-          "/project/plugins/my-plugin/engine/src/unused.c.patch",
-          "/project/plugins/my-plugin/engine/include/unused.h.patch",
-        ]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src/used.c.patch",
+      "/project/plugins/my-plugin/engine/src/unused.c.patch",
+      "/project/plugins/my-plugin/engine/include/unused.h.patch",
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, unusedFiles);
 
     expect(patches).toHaveLength(1);
-    expect(patches[0].rel).toBe("src/used.c.patch");
+    expect(patches[0]?.rel).toBe("src/used.c.patch");
   });
 
   test("It should return empty array when no patches found", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, []);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, unusedFiles);
 
@@ -974,14 +987,10 @@ describe("collectPatchFiles", () => {
   });
 
   test("It should handle nested patch files", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [
-          "/project/plugins/my-plugin/engine/src/deep/nested/file.h.patch",
-          "/project/plugins/my-plugin/engine/src/subdir/nested.c.patch",
-        ]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src/deep/nested/file.h.patch",
+      "/project/plugins/my-plugin/engine/src/subdir/nested.c.patch",
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, []);
 
@@ -998,25 +1007,17 @@ describe("collectPatchFiles", () => {
 
   test("It should preserve absolute paths in collected patches", async () => {
     const absolutePath = "/project/plugins/my-plugin/engine/src/core.c.patch";
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [absolutePath]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([absolutePath]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, []);
 
-    expect(patches[0].abs).toBe(absolutePath);
+    expect(patches[0]?.abs).toBe(absolutePath);
   });
 
   test("It should use pathToPosix for comparing with unused files", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [
-          "/project/plugins/my-plugin/engine/src\\windows\\path.c.patch",
-        ]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src\\windows\\path.c.patch",
+    ]);
     mockedPathToPosix.mockReturnValue("src/windows/path.c");
 
     const patches = await collectPatchFiles(usedEnginePluginPath, [
@@ -1028,54 +1029,42 @@ describe("collectPatchFiles", () => {
   });
 
   test("It should handle empty unusedFiles list", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, ["/project/plugins/my-plugin/engine/src/file.c.patch"]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src/file.c.patch",
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, []);
 
     expect(patches).toHaveLength(1);
   });
 
-  test("It should preserve the order returned by glob", async () => {
-    // glob sorts by default; collectPatchFiles relies on that and preserves order
-    const sortedPaths = [
+  test("It should preserve deterministic patch file order from the glob helper", async () => {
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
       "/project/plugins/my-plugin/engine/src/a.c.patch",
       "/project/plugins/my-plugin/engine/src/m.c.patch",
       "/project/plugins/my-plugin/engine/src/z.c.patch",
-    ];
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, sortedPaths);
-      },
-    );
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, []);
 
     expect(patches).toHaveLength(3);
-    expect(patches[0].rel).toBe("src/a.c.patch");
-    expect(patches[1].rel).toBe("src/m.c.patch");
-    expect(patches[2].rel).toBe("src/z.c.patch");
+    expect(patches[0]?.rel).toBe("src/a.c.patch");
+    expect(patches[1]?.rel).toBe("src/m.c.patch");
+    expect(patches[2]?.rel).toBe("src/z.c.patch");
   });
 
   test("It should only exclude patches that exactly match unused files", async () => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, [
-          "/project/plugins/my-plugin/engine/src/unused.c.patch",
-          "/project/plugins/my-plugin/engine/src/unused_extra.c.patch",
-        ]);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue([
+      "/project/plugins/my-plugin/engine/src/unused.c.patch",
+      "/project/plugins/my-plugin/engine/src/unused_extra.c.patch",
+    ]);
 
     const patches = await collectPatchFiles(usedEnginePluginPath, [
       "src/unused.c",
     ]);
 
     expect(patches).toHaveLength(1);
-    expect(patches[0].rel).toBe("src/unused_extra.c.patch");
+    expect(patches[0]?.rel).toBe("src/unused_extra.c.patch");
   });
 });
 
@@ -1254,11 +1243,7 @@ describe("warnOnPluginFileCollisions", () => {
   });
 
   const mockGlobFiles = (files: string[]) => {
-    (mockedGlob as unknown as jest.Mock).mockImplementation(
-      (pattern, options, callback) => {
-        callback(null, files);
-      },
-    );
+    (mockedGlob as unknown as jest.Mock).mockResolvedValue(files);
   };
 
   test("It should not warn when no files have been written yet", async () => {

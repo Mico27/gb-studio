@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import GlobalError from "components/error/GlobalError";
 import AppToolbar from "./AppToolbar";
-import BackgroundsPage from "components/pages/BackgroundsPage";
-import SpritesPage from "components/pages/SpritesPage";
-import DialoguePage from "components/pages/DialoguePage";
-import WorldPage from "components/pages/WorldPage";
-import MusicPage from "components/pages/MusicPage";
-import PalettePage from "components/pages/PalettePage";
-import SettingsPage from "components/pages/SettingsPage";
+import ImagesPage from "components/images/ImagesPage";
+import SpritesPage from "components/sprites/SpritesPage";
+import DialoguePage from "components/dialogue/DialoguePage";
+import WorldPage from "components/world/WorldPage";
+import MusicPage from "components/music/MusicPage";
+import PalettePage from "components/palettes/PalettePage";
+import SettingsPage from "components/settings/SettingsPage";
 import { DropZone } from "ui/upload/DropZone";
-import projectActions from "store/features/project/projectActions";
-import SoundsPage from "components/pages/SoundsPage";
+import SoundsPage from "components/sounds/SoundsPage";
 import LoadingPane from "ui/loading/LoadingPane";
 import styled from "styled-components";
-import { useAppDispatch, useAppSelector } from "store/hooks";
+import { useAppSelector } from "store/hooks";
+import API from "renderer/lib/api";
 
 const AppWrapper = styled.div`
   width: 100%;
@@ -30,7 +30,6 @@ const AppContent = styled.div`
 `;
 
 const App = () => {
-  const dispatch = useAppDispatch();
   const [draggingOver, setDraggingOver] = useState(false);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -70,19 +69,16 @@ const App = () => {
     }, 100);
   }, []);
 
-  const onDrop = useCallback(
-    (e: DragEvent) => {
-      setDraggingOver(false);
-      if (!e.dataTransfer?.files) {
-        return;
-      }
-      for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        const file = e.dataTransfer.files[i];
-        dispatch(projectActions.addFileToProject(file.path));
-      }
-    },
-    [dispatch],
-  );
+  const onDrop = useCallback((e: DragEvent) => {
+    setDraggingOver(false);
+    if (!e.dataTransfer?.files) {
+      return;
+    }
+    for (let i = 0; i < e.dataTransfer.files.length; i++) {
+      const file = e.dataTransfer.files[i];
+      API.project.addFile(file);
+    }
+  }, []);
 
   useEffect(() => {
     window.addEventListener("dragover", onDragOver);
@@ -107,7 +103,7 @@ const App = () => {
       ) : (
         <AppContent>
           {section === "world" && <WorldPage />}
-          {section === "backgrounds" && <BackgroundsPage />}
+          {section === "images" && <ImagesPage />}
           {section === "sprites" && <SpritesPage />}
           {section === "music" && <MusicPage />}
           {section === "sounds" && <SoundsPage />}

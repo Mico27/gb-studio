@@ -1,5 +1,4 @@
-import glob from "glob";
-import { promisify } from "util";
+import { glob } from "lib/helpers/glob";
 import { readFile, remove, writeFile } from "fs-extra";
 import { PrecompiledScene } from "lib/compiler/generateGBVMData";
 import ScriptBuilder from "lib/compiler/scriptBuilder/scriptBuilder";
@@ -13,8 +12,8 @@ import {
 import { ScriptEventHandlers } from "lib/scriptEventsHandlers/handlerTypes";
 import { getTestScriptHandlers } from "../getTestScriptHandlers";
 import {
+  getQuickJSInstance,
   loadScriptEventHandlerFromUntrustedString,
-  QuickJS,
 } from "lib/scriptEventsHandlers/untrustedHandler";
 import { loadScriptEventHandlerFromTrustedString } from "lib/scriptEventsHandlers/trustedHandler";
 import { TestQuickJSWASMModule } from "quickjs-emscripten-core";
@@ -25,8 +24,6 @@ import { PrecompiledFontData } from "lib/compiler/compileFonts";
 import { compileEventsWithScriptBuilder } from "lib/compiler/compileEntityEvents";
 import { stripCommentsFromGBVMScript } from "lib/compiler/gbvm/buildHelpers";
 import { ScriptEvent } from "shared/lib/resources/types";
-
-const globAsync = promisify(glob);
 
 const matchIncludes = (substring: string): RegExp => {
   return new RegExp(substring, "s");
@@ -45,7 +42,10 @@ describe("Compare output from trusted and untrusted plugin handlers", () => {
   beforeAll(async () => {
     scriptEventHandlers = await getTestScriptHandlers();
     setL10NData(en);
-    const exportPaths = await globAsync(join(__dirname, "_tmp/*.s"));
+    const exportPaths = await glob("_tmp/*.s", {
+      cwd: __dirname,
+      absolute: true,
+    });
     for (const exportPath of exportPaths) {
       await remove(exportPath);
     }
@@ -54,7 +54,7 @@ describe("Compare output from trusted and untrusted plugin handlers", () => {
   });
 
   afterEach(async () => {
-    const qjs = await QuickJS;
+    const qjs = await getQuickJSInstance();
     const testQJS = new TestQuickJSWASMModule(qjs);
     testQJS.assertNoMemoryAllocated();
   });
@@ -631,11 +631,11 @@ describe("Compare output from trusted and untrusted plugin handlers", () => {
 
         if (testPostUpdate) {
           for (const test of testPostUpdate) {
-            const qUpdatedArgs = qPlugin.fieldsLookup[test.key].postUpdateFn?.(
+            const qUpdatedArgs = qPlugin.fieldsLookup[test.key]?.postUpdateFn?.(
               test.newArgs,
               test.prevArgs,
             );
-            const eUpdatedArgs = ePlugin.fieldsLookup[test.key].postUpdateFn?.(
+            const eUpdatedArgs = ePlugin.fieldsLookup[test.key]?.postUpdateFn?.(
               test.newArgs,
               test.prevArgs,
             );

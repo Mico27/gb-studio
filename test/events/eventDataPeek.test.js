@@ -2,7 +2,6 @@ import { compile } from "../../src/lib/events/eventDataPeek";
 
 test("Should be able to save data", () => {
   const mockDataPeek = jest.fn();
-  const truePath = [{ command: "EVENT_END", id: "def" }];
   compile(
     {
       saveSlot: 1,
@@ -13,5 +12,5 @@ test("Should be able to save data", () => {
       dataPeek: mockDataPeek,
     },
   );
-  expect(mockDataPeek).toBeCalledWith(1, 14, 12);
+  expect(mockDataPeek).toHaveBeenCalledWith(1, 14, 12);
 });

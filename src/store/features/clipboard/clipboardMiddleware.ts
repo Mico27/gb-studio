@@ -1,6 +1,7 @@
 import flatten from "lodash/flatten";
 import { UnknownAction, Dispatch, Middleware } from "@reduxjs/toolkit";
 import { RootState } from "store/storeTypes";
+import { generateScriptEventInsertActions } from "store/features/entities/entitiesState";
 import {
   customEventSelectors,
   actorSelectors,
@@ -11,11 +12,11 @@ import {
   spriteStateSelectors,
   spriteAnimationSelectors,
   scriptEventSelectors,
-  generateScriptEventInsertActions,
   sceneSelectors,
+  backgroundSelectors,
   actorPrefabSelectors,
   triggerPrefabSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import {
   ActorNormalized,
   ActorPrefabNormalized,
@@ -27,11 +28,11 @@ import {
   TriggerNormalized,
   TriggerPrefabNormalized,
 } from "shared/lib/entities/entitiesTypes";
-import actions from "./clipboardActions";
 import entitiesActions from "store/features/entities/entitiesActions";
 import editorActions from "store/features/editor/editorActions";
 import { copy as rawCopy, pasteAny } from "./clipboardHelpers";
 import {
+  ClipboardSceneGrid,
   ClipboardType,
   ClipboardTypeActors,
   ClipboardTypeMetasprites,
@@ -41,6 +42,7 @@ import {
   ClipboardTypeScriptEvents,
   ClipboardTypeSpriteState,
   ClipboardTypeTriggers,
+  ClipboardTypeSceneGrid,
 } from "./clipboardTypes";
 import clipboardActions from "./clipboardActions";
 import {
@@ -54,7 +56,8 @@ import {
 import keyBy from "lodash/keyBy";
 import {
   ScriptEventDefs,
-  patchEventArgs,
+  remapActorReferencesInEventArgs,
+  remapActorReferencesInEventOverrides,
 } from "shared/lib/scripts/eventHelpers";
 import { EVENT_CALL_CUSTOM_EVENT } from "consts";
 import API from "renderer/lib/api";
@@ -72,6 +75,11 @@ import {
 import { batch } from "react-redux";
 import { sortSubsetStringArray } from "shared/lib/helpers/array";
 import { MetaspriteTile, Variable } from "shared/lib/resources/types";
+import { copyGridSelection } from "shared/lib/tiles/grid";
+import {
+  getTilemapLayersTileColors,
+  isTilemapLayerCellTopmost,
+} from "shared/lib/tiles/sceneTilemapData";
 
 const generateLocalVariableInsertActions = (
   originalId: string,
@@ -435,27 +443,60 @@ const generateSceneInsertActions = (
     );
 
   const remappedActions = actions.map((action) => {
-    if (!entitiesActions.addScriptEvents.match(action)) {
-      return action;
-    }
-    return {
-      ...action,
-      payload: {
-        ...action.payload,
-        data: action.payload.data.map((eventData) => {
-          return {
-            ...eventData,
-            args: patchEventArgs(
-              eventData.command,
-              "actor",
-              eventData.args || {},
+    if (entitiesActions.addActor.match(action)) {
+      return {
+        ...action,
+        payload: {
+          ...action.payload,
+          defaults: {
+            ...action.payload.defaults,
+            prefabScriptOverrides: remapActorReferencesInEventOverrides(
+              action.payload.defaults?.prefabScriptOverrides,
+              scriptEventsLookup,
               actorMapping,
               scriptEventDefs,
             ),
-          };
-        }),
-      },
-    };
+          },
+        },
+      };
+    }
+    if (entitiesActions.addTrigger.match(action)) {
+      return {
+        ...action,
+        payload: {
+          ...action.payload,
+          defaults: {
+            ...action.payload.defaults,
+            prefabScriptOverrides: remapActorReferencesInEventOverrides(
+              action.payload.defaults?.prefabScriptOverrides,
+              scriptEventsLookup,
+              actorMapping,
+              scriptEventDefs,
+            ),
+          },
+        },
+      };
+    }
+    if (entitiesActions.addScriptEvents.match(action)) {
+      return {
+        ...action,
+        payload: {
+          ...action.payload,
+          data: action.payload.data.map((eventData) => {
+            return {
+              ...eventData,
+              args: remapActorReferencesInEventArgs(
+                eventData.command,
+                eventData.args || {},
+                actorMapping,
+                scriptEventDefs,
+              ),
+            };
+          }),
+        },
+      };
+    }
+    return action;
   });
 
   return remappedActions;
@@ -473,9 +514,123 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
       }
     };
 
-    if (actions.copyText.match(action)) {
+    if (clipboardActions.copyText.match(action)) {
       API.clipboard.writeText(action.payload);
-    } else if (actions.copySpriteState.match(action)) {
+    } else if (clipboardActions.copySceneGridSelection.match(action)) {
+      const state = store.getState();
+      const selection = state.editor.scenePaintSelection;
+      if (!selection) return;
+      const scene = sceneSelectors.selectById(state, selection.sceneId);
+      if (!scene) return;
+      let values: number[] | undefined;
+      let autotiles: number[] | undefined;
+      let tileColors: number[] | undefined;
+      let collisions: number[] | undefined;
+      let linkedCells: boolean[] | undefined;
+      let tilesets: ClipboardSceneGrid["tilesets"];
+      let autotileDefinitions: ClipboardSceneGrid["autotileDefinitions"];
+      if (selection.mode === "tiles") {
+        const tilemap = scene.tilemap;
+        if (!tilemap) return;
+        tilesets = tilemap.tilesets;
+        autotileDefinitions = tilemap.autotiles;
+        const layerIndex = tilemap.layers.findIndex(
+          (layer) => layer.id === selection.layerId,
+        );
+        const layer = layerIndex >= 0 ? tilemap.layers[layerIndex] : undefined;
+        if (!layer) return;
+        values = copyGridSelection(
+          layer.tiles,
+          scene.width,
+          scene.height,
+          selection.selection,
+          0,
+        );
+        if (layer.autotiles) {
+          autotiles = copyGridSelection(
+            layer.autotiles,
+            scene.width,
+            scene.height,
+            selection.selection,
+            0,
+          );
+        }
+        const colors = getTilemapLayersTileColors(
+          tilemap,
+          scene.width,
+          scene.height,
+        );
+        tileColors = copyGridSelection(
+          colors,
+          scene.width,
+          scene.height,
+          selection.selection,
+          0,
+        );
+        collisions = copyGridSelection(
+          scene.collisions,
+          scene.width,
+          scene.height,
+          selection.selection,
+          0,
+        );
+        linkedCells = [];
+        for (let y = 0; y < selection.selection.height; y++) {
+          for (let x = 0; x < selection.selection.width; x++) {
+            const sceneX = selection.selection.x + x;
+            const sceneY = selection.selection.y + y;
+            const cellIndex = sceneY * scene.width + sceneX;
+            linkedCells.push(
+              sceneX >= 0 &&
+                sceneY >= 0 &&
+                sceneX < scene.width &&
+                sceneY < scene.height &&
+                isTilemapLayerCellTopmost(tilemap, layerIndex, cellIndex),
+            );
+          }
+        }
+      } else if (selection.mode === "collisions") {
+        values = copyGridSelection(
+          scene.collisions,
+          scene.width,
+          scene.height,
+          selection.selection,
+          0,
+        );
+      } else {
+        const background = scene.backgroundId
+          ? backgroundSelectors.selectById(state, scene.backgroundId)
+          : undefined;
+        const width = scene.tilemap ? scene.width : background?.width;
+        const height = scene.tilemap ? scene.height : background?.height;
+        const colors = scene.tilemap
+          ? getTilemapLayersTileColors(scene.tilemap, scene.width, scene.height)
+          : background?.tileColors;
+        if (!width || !height || !colors) return;
+        values = copyGridSelection(
+          colors,
+          width,
+          height,
+          selection.selection,
+          0,
+        );
+      }
+      copy({
+        format: ClipboardTypeSceneGrid,
+        data: {
+          mode: selection.mode,
+          width: selection.selection.width,
+          height: selection.selection.height,
+          values,
+          autotiles,
+          tileColors,
+          collisions,
+          linkedCells,
+          tilesets,
+          autotileDefinitions,
+        },
+      });
+    } else if (clipboardActions.copySpriteState.match(action)) {
       const state = store.getState();
       const spriteStateLookup = spriteStateSelectors.selectEntities(state);
       const animationsLookup = spriteAnimationSelectors.selectEntities(state);
@@ -527,7 +682,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           metaspriteTiles,
         },
       });
-    } else if (actions.copyMetasprites.match(action)) {
+    } else if (clipboardActions.copyMetasprites.match(action)) {
       const state = store.getState();
       const metaspritesLookup = metaspriteSelectors.selectEntities(state);
       const metaspriteTilesLookup =
@@ -572,7 +727,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           metaspriteTiles,
         },
       });
-    } else if (actions.copyMetaspriteTiles.match(action)) {
+    } else if (clipboardActions.copyMetaspriteTiles.match(action)) {
       const state = store.getState();
       const metaspriteTilesLookup =
         metaspriteTileSelectors.selectEntities(state);
@@ -587,7 +742,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           metaspriteTiles,
         },
       });
-    } else if (actions.copyScriptEvents.match(action)) {
+    } else if (clipboardActions.copyScriptEvents.match(action)) {
       const state = store.getState();
       const scriptEventsLookup = scriptEventSelectors.selectEntities(state);
       const customEventsLookup = customEventSelectors.selectEntities(state);
@@ -635,7 +790,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           script: action.payload.scriptEventIds,
         },
       });
-    } else if (actions.copyTriggers.match(action)) {
+    } else if (clipboardActions.copyTriggers.match(action)) {
       const state = store.getState();
       const triggersLookup = triggerSelectors.selectEntities(state);
       const scriptEventsLookup = scriptEventSelectors.selectEntities(state);
@@ -713,7 +868,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           triggerPrefabs,
         },
       });
-    } else if (actions.copyActors.match(action)) {
+    } else if (clipboardActions.copyActors.match(action)) {
       const state = store.getState();
       const actorsLookup = actorSelectors.selectEntities(state);
       const scriptEventsLookup = scriptEventSelectors.selectEntities(state);
@@ -789,7 +944,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           actorPrefabs,
         },
       });
-    } else if (actions.copyScenes.match(action)) {
+    } else if (clipboardActions.copyScenes.match(action)) {
       const state = store.getState();
       const scenesLookup = sceneSelectors.selectEntities(state);
       const actorsLookup = actorSelectors.selectEntities(state);
@@ -918,7 +1073,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           triggerPrefabs,
         },
       });
-    } else if (actions.pasteScriptEvents.match(action)) {
+    } else if (clipboardActions.pasteScriptEvents.match(action)) {
       const clipboard = await pasteAny();
       if (!clipboard) {
         return next(action);
@@ -957,7 +1112,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           });
         }
       }
-    } else if (actions.pasteScriptEventValues.match(action)) {
+    } else if (clipboardActions.pasteScriptEventValues.match(action)) {
       const clipboard = await pasteAny();
       if (!clipboard) {
         return next(action);
@@ -983,7 +1138,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           );
         }
       }
-    } else if (actions.pasteTriggerAt.match(action)) {
+    } else if (clipboardActions.pasteTriggerAt.match(action)) {
       const clipboard = await pasteAny();
       if (clipboard && clipboard.format === ClipboardTypeTriggers) {
         const state = store.getState();
@@ -1036,7 +1191,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           });
         }
       }
-    } else if (actions.pasteActorAt.match(action)) {
+    } else if (clipboardActions.pasteActorAt.match(action)) {
       const clipboard = await pasteAny();
       if (clipboard && clipboard.format === ClipboardTypeActors) {
         const state = store.getState();
@@ -1088,7 +1243,7 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           });
         }
       }
-    } else if (actions.pasteSceneAt.match(action)) {
+    } else if (clipboardActions.pasteSceneAt.match(action)) {
       const clipboard = await pasteAny();
       if (clipboard && clipboard.format === ClipboardTypeScenes) {
         const state = store.getState();
@@ -1161,14 +1316,14 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
           });
         }
       }
-    } else if (actions.fetchClipboard.match(action)) {
+    } else if (clipboardActions.fetchClipboard.match(action)) {
       const clipboard = await pasteAny();
       if (clipboard) {
         store.dispatch(clipboardActions.setClipboardData(clipboard));
       } else {
         store.dispatch(clipboardActions.clearClipboardData());
       }
-    } else if (actions.pasteSprite.match(action)) {
+    } else if (clipboardActions.pasteSprite.match(action)) {
       const clipboard = await pasteAny();
 
       if (!clipboard) {
@@ -1364,14 +1519,14 @@ const clipboardMiddleware: Middleware<Dispatch, RootState> =
 
         store.dispatch(editorActions.setSelectedMetaspriteTileIds(newIds));
       }
-    } else if (actions.copyPaletteIds.match(action)) {
+    } else if (clipboardActions.copyPaletteIds.match(action)) {
       copy({
         format: ClipboardTypePaletteIds,
         data: {
           paletteIds: action.payload.paletteIds,
         },
       });
-    } else if (actions.pastePaletteIds.match(action)) {
+    } else if (clipboardActions.pastePaletteIds.match(action)) {
       const clipboard = await pasteAny();
 
       if (!clipboard) {

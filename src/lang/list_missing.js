@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 /* eslint-disable global-require */
 /* eslint-disable import/no-dynamic-require */
-/* eslint-disable no-console */
 const fs = require("fs");
 const locale = process.argv[2];
 
@@ -27,7 +26,7 @@ const en = require(`${__dirname}/en.json`);
 let translation = {};
 try {
   translation = require(`${__dirname}/${locale}.json`);
-} catch (e) {
+} catch {
   console.log(`Translation file not found ${locale}.json`);
   console.log("Creating...");
   console.log("");

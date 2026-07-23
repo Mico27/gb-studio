@@ -8,6 +8,13 @@
       }
     },
     {
+      "id": "111731287",
+      "type": "user",
+      "attributes": {
+        "full_name": "Diante Clark"
+      }
+    },
+    {
       "id": "7443910",
       "type": "user",
       "attributes": {
@@ -19,13 +26,6 @@
       "type": "user",
       "attributes": {
         "full_name": "Kevin"
-      }
-    },
-    {
-      "id": "214014802",
-      "type": "user",
-      "attributes": {
-        "full_name": "MICHAEL FLIPPEN"
       }
     },
     {
@@ -101,6 +101,13 @@
       }
     },
     {
+      "id": "49507838",
+      "type": "user",
+      "attributes": {
+        "full_name": "Keegan Choffat"
+      }
+    },
+    {
       "id": "71689",
       "type": "user",
       "attributes": {
@@ -120,16 +127,16 @@
       "attributes": {
         "full_name": "MsRiaCayde"
       }
+    },
+    {
+      "id": "218959896",
+      "type": "user",
+      "attributes": {
+        "full_name": "Pulsar Pocket"
+      }
     }
   ],
   "pastPatrons": [
-    {
-      "id": "111731287",
-      "type": "user",
-      "attributes": {
-        "full_name": "Diante Clark"
-      }
-    },
     {
       "id": "852350",
       "type": "user",
@@ -198,6 +205,13 @@
       "type": "user",
       "attributes": {
         "full_name": "Martin Cremerius-Gauer"
+      }
+    },
+    {
+      "id": "214014802",
+      "type": "user",
+      "attributes": {
+        "full_name": "MICHAEL FLIPPEN"
       }
     },
     {

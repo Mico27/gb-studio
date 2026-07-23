@@ -20,6 +20,7 @@ import { initialState as initialNavigationState } from "../src/store/features/na
 import { initialState as initialDocumentState } from "../src/store/features/document/documentState";
 import { initialState as initialErrorState } from "../src/store/features/error/errorState";
 import { initialState as initialAssetsState } from "../src/store/features/assets/assetsState";
+import { initialState as initialWebTemplatesState } from "../src/store/features/webTemplates/webTemplatesState";
 import {
   EngineFieldSchema,
   initialState as initialEngineState,
@@ -46,6 +47,7 @@ import {
   BackgroundAsset,
   CompressedBackgroundResource,
   CompressedSceneResourceWithChildren,
+  CompressedTilesetResource,
   EmoteResource,
   EngineFieldValuesResource,
   FontResource,
@@ -384,6 +386,8 @@ export const dummyProjectData: ProjectData = {
     defaultSceneTypeId: "TOPDOWN",
     disabledSceneTypeIds: [],
     autoTileFlipEnabled: true,
+    webTemplate: "",
+    selectedSceneTilesetId: "",
   },
 };
 
@@ -571,6 +575,14 @@ export const dummyTilesetResource: TilesetResource = {
   height: 256,
   imageWidth: 256,
   imageHeight: 256,
+  tileColors: [],
+  tileCollisions: [],
+};
+
+export const dummyCompressedTilesetResource: CompressedTilesetResource = {
+  ...dummyTilesetResource,
+  tileCollisions: "",
+  tileColors: "",
 };
 
 export const dummyFontResource: FontResource = {
@@ -685,6 +697,8 @@ export const dummySettingsResource: SettingsResource = {
   defaultSceneTypeId: "TOPDOWN",
   disabledSceneTypeIds: [],
   autoTileFlipEnabled: true,
+  webTemplate: "",
+  selectedSceneTilesetId: "",
 };
 
 export const dummyVariablesResource: VariablesResource = {
@@ -829,6 +843,8 @@ export const dummyProjectResources: ProjectResources = {
     defaultSceneTypeId: "TOPDOWN",
     disabledSceneTypeIds: [],
     autoTileFlipEnabled: true,
+    webTemplate: "",
+    selectedSceneTilesetId: "",
   },
 };
 
@@ -851,6 +867,10 @@ export const getDummyCompiledFont = async (): Promise<PrecompiledFontData> => {
     ],
     `${projectTemplatesRoot}/gbhtml`,
   );
+
+  if (!compiledFontsRet[0]) {
+    throw new Error("Unable to compile dummy font");
+  }
 
   return compiledFontsRet[0];
 };
@@ -876,6 +896,9 @@ export const dummyRootState: RootState = {
   },
   assets: {
     ...initialAssetsState,
+  },
+  webTemplates: {
+    ...initialWebTemplatesState,
   },
   engine: {
     ...initialEngineState,

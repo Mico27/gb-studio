@@ -13,24 +13,25 @@ import {
   sceneSelectors,
   spriteAnimationSelectors,
   spriteSheetSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import MetaspriteGrid from "./MetaspriteGrid";
-import { SpriteSliceCanvas } from "./preview/SpriteSliceCanvas";
+import { SpriteSliceCanvas } from "components/rendering/SpriteSliceCanvas";
 import entitiesActions from "store/features/entities/entitiesActions";
 import editorActions from "store/features/editor/editorActions";
 import clipboardActions from "store/features/clipboard/clipboardActions";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { MetaspriteCanvas } from "./preview/MetaspriteCanvas";
+import { MetaspriteCanvas } from "components/rendering/MetaspriteCanvas";
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import { Selection } from "ui/document/Selection";
-import renderMetaspriteTileContextMenu from "components/world/renderMetaspriteTileContextMenu";
+import renderMetaspriteTileContextMenu from "components/sprites/contextMenus/renderMetaspriteTileContextMenu";
 import {
   MetaspriteTile,
   MonoOBJPalette,
   SpriteModeSetting,
 } from "shared/lib/resources/types";
-import { TILE_SIZE } from "consts";
+import { DMG_PALETTE, TILE_SIZE } from "consts";
 import { useContextMenu } from "ui/hooks/use-context-menu";
+import { useSelectAllShortcut } from "ui/hooks/use-select-all";
 
 interface MetaspriteEditorProps {
   spriteSheetId: string;
@@ -234,6 +235,40 @@ const MetaspriteEditor = ({
   const defaultSpriteMode = useAppSelector(
     (state) => state.project.present.settings.spriteMode,
   );
+
+  const selectedTiles = useMemo(
+    () =>
+      selectedTileIds
+        .map((tileId) => metaspriteTileLookup[tileId])
+        .filter((tile) => tile !== undefined),
+    [selectedTileIds, metaspriteTileLookup],
+  );
+
+  const selectionPaletteIndex = useMemo(() => {
+    const firstPaletteIndex = selectedTiles[0]?.paletteIndex;
+    if (
+      selectedTiles.every((tile) => tile.paletteIndex === firstPaletteIndex)
+    ) {
+      return firstPaletteIndex;
+    }
+    return undefined;
+  }, [selectedTiles]);
+
+  const spritePalettes = useMemo(() => {
+    if (!colorsEnabled) {
+      return undefined;
+    }
+    return Array.from({ length: 8 }, (_, i) => {
+      const scenePaletteId = scene?.spritePaletteIds?.[i];
+      const defaultPaletteId = defaultSpritePaletteIds[i];
+      return (
+        (scenePaletteId ? palettesLookup[scenePaletteId] : undefined) ??
+        palettesLookup[defaultPaletteId] ??
+        DMG_PALETTE
+      );
+    });
+  }, [colorsEnabled, defaultSpritePaletteIds, palettesLookup, scene]);
+
   const [draggingSelection, setDraggingSelection] = useState(false);
   const [draggingMetasprite, setDraggingMetasprite] = useState(false);
   const dragMetasprites = useRef<MetaspriteSelection[]>([]);
@@ -368,8 +403,7 @@ const MetaspriteEditor = ({
 
       // Clear focus from animation timeline
       const el = document.querySelector(":focus") as unknown as
-        | BlurableDOMElement
-        | undefined;
+        BlurableDOMElement | undefined;
       if (el && el.blur) el.blur();
 
       const newActions: PayloadAction<{
@@ -433,8 +467,7 @@ const MetaspriteEditor = ({
 
         // Clear focus from animation timeline
         const el = document.querySelector(":focus") as unknown as
-          | BlurableDOMElement
-          | undefined;
+          BlurableDOMElement | undefined;
         if (el && el.blur) el.blur();
 
         if (e.shiftKey) {
@@ -682,11 +715,6 @@ const MetaspriteEditor = ({
   }, [setIsOverEditor]);
 
   const onSelectAll = useCallback(() => {
-    const selection = window.getSelection();
-    if (!selection || selection.focusNode) {
-      return;
-    }
-    window.getSelection()?.empty();
     setSelectedTileIds(metasprite?.tiles || []);
   }, [metasprite?.tiles, setSelectedTileIds]);
 
@@ -752,15 +780,10 @@ const MetaspriteEditor = ({
   }, [hidden, selectedTileIds, metaspriteId, animationId, onCopy, onPaste]);
 
   // Selection
-  useEffect(() => {
-    if (!hidden) {
-      document.addEventListener("selectionchange", onSelectAll);
-      return () => {
-        document.removeEventListener("selectionchange", onSelectAll);
-      };
-    }
-    return () => {};
-  }, [hidden, metasprite?.tiles, onSelectAll]);
+  useSelectAllShortcut({
+    onSelectAll,
+    enabled: !hidden,
+  });
 
   const getTilePalette = useCallback(
     (metaspriteTile: MetaspriteTile) => {
@@ -798,14 +821,27 @@ const MetaspriteEditor = ({
 
   //#region Context Menu
 
-  const getContextMenu = useCallback(() => {
-    return renderMetaspriteTileContextMenu({
+  const getContextMenu = useCallback(
+    ({ closeMenu }: { closeMenu: () => void }) => {
+      return renderMetaspriteTileContextMenu({
+        dispatch,
+        spriteSheetId,
+        metaspriteId,
+        selectedTileIds,
+        selectionPaletteIndex,
+        palettes: spritePalettes,
+        onClose: closeMenu,
+      });
+    },
+    [
       dispatch,
-      spriteSheetId,
       metaspriteId,
       selectedTileIds,
-    });
-  }, [dispatch, metaspriteId, selectedTileIds, spriteSheetId]);
+      spriteSheetId,
+      selectionPaletteIndex,
+      spritePalettes,
+    ],
+  );
 
   const { onContextMenu, contextMenuElement } = useContextMenu({
     getMenu: getContextMenu,

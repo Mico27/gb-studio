@@ -8,13 +8,13 @@ import styled, { css } from "styled-components";
 import { Button } from "ui/buttons/Button";
 import { CodeViewer } from "ui/form/CodeEditor";
 import { ScriptEditorCtx } from "shared/lib/scripts/context";
-import { ScriptEditorContext } from "components/script/ScriptEditorContext";
+import { ScriptEditorContext } from "components/script/context/ScriptEditorContext";
 import {
   actorSelectors,
   customEventSelectors,
   sceneSelectors,
   triggerSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import {
   ActorScriptKey,
   SceneScriptKey,

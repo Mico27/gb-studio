@@ -1,4 +1,4 @@
-import React, { useState, FC, useMemo } from "react";
+import React, { memo, useMemo, useState } from "react";
 import {
   Select as DefaultSelect,
   Option,
@@ -6,7 +6,7 @@ import {
   SelectCommonProps,
 } from "ui/form/Select";
 import styled from "styled-components";
-import { constantSelectors } from "store/features/entities/entitiesState";
+import { constantSelectors } from "store/features/entities/entitiesSelectors";
 import { CheckIcon, PencilIcon } from "ui/icons/Icons";
 import { IMEInput } from "ui/form/IMEInput";
 import entitiesActions from "store/features/entities/entitiesActions";
@@ -126,12 +126,12 @@ const ConstantRenameCompleteButton = styled.button`
   }
 `;
 
-export const ConstantSelect: FC<ConstantSelectProps> = ({
+const ConstantSelectComponent = ({
   value,
   onChange,
   allowRename,
   ...selectProps
-}) => {
+}: ConstantSelectProps) => {
   const [renameVisible, setRenameVisible] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [renameId, setRenameId] = useState("");
@@ -159,12 +159,10 @@ export const ConstantSelect: FC<ConstantSelectProps> = ({
     const engineOptions: Option[] = engineConstantsLookup
       ? Object.keys(engineConstantsLookup)
           .sort()
-          .map(
-            (name): Option => ({
-              value: `engine::${name}`,
-              label: name,
-            }),
-          )
+          .map((name): Option => ({
+            value: `engine::${name}`,
+            label: name,
+          }))
       : [];
 
     const groupedOptions: OptGroup[] = [
@@ -295,3 +293,7 @@ export const ConstantSelect: FC<ConstantSelectProps> = ({
     </ConstantSelectWrapper>
   );
 };
+
+export const ConstantSelect = memo<ConstantSelectProps>(
+  ConstantSelectComponent,
+);

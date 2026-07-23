@@ -112,3 +112,14 @@ export const removeArrayElement = <T>(arr: T[], element: T): T[] => {
 export const removeArrayElements = <T>(arr: T[], elements: T[]): T[] => {
   return arr.filter((e) => !elements.includes(e));
 };
+
+export const first = <T>(array: readonly T[]): T | undefined => {
+  return array[0];
+};
+
+export const padArrayEnd = <T>(arr: T[], len: number, padding: T) => {
+  if (arr.length > len) {
+    return arr.slice(0, len);
+  }
+  return arr.concat(Array(len - arr.length).fill(padding));
+};

@@ -25,7 +25,12 @@ let metronomeEnabled = false;
 let lastPlaybackUpdateKey: string | null = null;
 let lastPlaybackRowKey: string | null = null;
 
-const channels = [false, false, false, false];
+const channels: [boolean, boolean, boolean, boolean] = [
+  false,
+  false,
+  false,
+  false,
+];
 const previewEmulator = createEmulator();
 
 let onIntervalCallback = (_updateData: MusicPlaybackState) => {};
@@ -506,7 +511,7 @@ const renderSongAudio = async (
   const currentOrderAddr = getRamAddress("current_order");
   const rowAddr = getRamAddress("row");
   const orderCntAddr = getRamAddress("order_cnt");
-  const previousChannels = [...channels];
+  const previousChannels: [boolean, boolean, boolean, boolean] = [...channels];
 
   try {
     updateRom(song);
@@ -663,6 +668,7 @@ const encodeAudio = async (
       : new mediabunny.AudioSampleSource({
           codec,
           bitrate: mediabunny.QUALITY_HIGH,
+          transform: format === "flac" ? { sampleFormat: "s16" } : undefined,
         });
 
   output.addAudioTrack(source);

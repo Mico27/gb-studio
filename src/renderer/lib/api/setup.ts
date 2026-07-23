@@ -1,4 +1,4 @@
-import { ipcRenderer, IpcRendererEvent, webFrame } from "electron";
+import { ipcRenderer, IpcRendererEvent, webFrame, webUtils } from "electron";
 import type { CreateProjectInput } from "lib/project/createProject";
 import type {
   MusicDataPacket,
@@ -15,14 +15,17 @@ import type {
   ProjectExportType,
 } from "store/features/buildGame/buildGameActions";
 import type { SettingsState } from "store/features/settings/settingsState";
-import type { BackgroundInfo } from "lib/helpers/validation";
+import type { BackgroundInfo, SceneTilemapInfo } from "lib/helpers/validation";
 import type { Song } from "shared/lib/uge/types";
 import type { UGIInstrument } from "shared/lib/uge/ugiHelper";
 import type { PrecompiledSpriteSheetData } from "lib/compiler/compileSprites";
 import type { NavigationSection } from "store/features/navigation/navigationState";
 import type { ScriptEventDefs } from "shared/lib/scripts/scriptDefHelpers";
 import type { MenuZoomType } from "shared/lib/menu/types";
-import type { DebuggerDataPacket } from "shared/lib/debugger/types";
+import type {
+  BackgroundPreviewType,
+  DebuggerDataPacket,
+} from "shared/lib/debugger/types";
 import type { SceneMapData, VariableMapData } from "lib/compiler/compileData";
 import type { UsageData } from "lib/compiler/romUsage";
 import type { Asset, AssetType } from "shared/lib/helpers/assets";
@@ -34,18 +37,19 @@ import {
   ColorCorrectionSetting,
   ColorModeSetting,
   CompressedBackgroundResourceAsset,
+  CompressedTilesetResourceAsset,
   Constant,
   EmoteResourceAsset,
   FontResourceAsset,
   MusicAsset,
   MusicResourceAsset,
+  Tileset,
   ProjectResources,
   SoundResourceAsset,
   Sprite,
   SpriteModeSetting,
   SpriteResourceAsset,
   TilesetAsset,
-  TilesetResourceAsset,
   WriteResourcesPatch,
 } from "shared/lib/resources/types";
 import type {
@@ -59,6 +63,12 @@ import type { TemplatePlugin } from "lib/templates/templateManager";
 import { EngineSchema } from "lib/project/loadEngineSchema";
 import { HexPalette } from "shared/lib/tiles/autoColor";
 import { ScriptDataTable } from "shared/lib/scriptDataTable/types";
+import type { WebTemplateInfo } from "shared/lib/webTemplates/types";
+import {
+  getDeepActiveElement as getActiveElement,
+  canPerformSelectAll,
+  performSelectAll,
+} from "renderer/lib/helpers/dom";
 
 interface L10NLookup {
   [key: string]: string | boolean | undefined;
@@ -126,6 +136,21 @@ const createWatchSubscribeAPI = <T>(channel: string) => {
     >(`${channel}:removed`),
   };
 };
+
+const selectAllListeners = new Set<() => void>();
+
+ipcRenderer.on("menu:select-all", () => {
+  const activeElement = getActiveElement();
+
+  if (activeElement && canPerformSelectAll(activeElement)) {
+    performSelectAll(activeElement);
+    return;
+  }
+
+  selectAllListeners.forEach((listener) => {
+    listener();
+  });
+});
 
 const APISetup = {
   platform: process.platform,
@@ -279,6 +304,19 @@ const APISetup = {
         colorCorrection,
         autoTileFlipEnabled,
       ),
+    getSceneTilemapInfo: (
+      scene: import("shared/lib/entities/entitiesTypes").SceneNormalized,
+      tilesets: Tileset[],
+      colorMode: ColorModeSetting,
+      autoTileFlipEnabled: boolean,
+    ): Promise<SceneTilemapInfo> =>
+      ipcRenderer.invoke(
+        "project:get-scene-tilemap-info",
+        scene,
+        tilesets,
+        colorMode,
+        autoTileFlipEnabled,
+      ),
     extractBackgroundMonoTiles: (
       background: BackgroundAsset,
       uiPalette: HexPalette | undefined,
@@ -290,8 +328,8 @@ const APISetup = {
         uiPalette,
         colorCorrection,
       ),
-    addFile: (filename: string): Promise<void> =>
-      ipcRenderer.invoke("project:add-file", filename),
+    addFile: (file: File): Promise<void> =>
+      ipcRenderer.invoke("project:add-file", webUtils.getPathForFile(file)),
     loadProject: (): Promise<LoadProjectResult> =>
       ipcRenderer.invoke("project:load"),
     saveProject: (data: WriteResourcesPatch): Promise<void> =>
@@ -306,6 +344,10 @@ const APISetup = {
       ipcRenderer.invoke("project:rename-asset", type, asset, filename),
     removeAsset: (type: AssetType, asset: Asset): Promise<boolean> =>
       ipcRenderer.invoke("project:remove-asset", type, asset),
+    getWebTemplates: (): Promise<WebTemplateInfo[]> =>
+      ipcRenderer.invoke("project:web-template:list"),
+    ejectWebTemplate: (): Promise<WebTemplateInfo[] | undefined> =>
+      ipcRenderer.invoke("project:web-template:eject"),
   },
   script: {
     getScriptAutoLabel: (
@@ -418,6 +460,8 @@ const APISetup = {
       ipcRenderer.invoke("debugger:set-breakpoints", breakpoints),
     setWatchedVariableIds: (variableIds: string[]) =>
       ipcRenderer.invoke("debugger:set-watched", variableIds),
+    setBackgroundPreviewType: (type: BackgroundPreviewType) =>
+      ipcRenderer.invoke("debugger:set-background-preview-type", type),
     sendToProjectWindow: (data: DebuggerDataPacket) =>
       ipcRenderer.send("debugger:data-receive", data),
   },
@@ -453,6 +497,14 @@ const APISetup = {
       pasteInPlace: createSubscribeAPI<(event: IpcRendererEvent) => void>(
         "menu:paste-in-place",
       ),
+      selectAll: {
+        subscribe: (listener: () => void) => {
+          selectAllListeners.add(listener);
+          return () => {
+            selectAllListeners.delete(listener);
+          };
+        },
+      },
       midiInputToggle: createSubscribeAPI<(event: IpcRendererEvent) => void>(
         "menu:midi-input-toggle",
       ),
@@ -481,6 +533,9 @@ const APISetup = {
         createSubscribeAPI<(event: IpcRendererEvent) => void>(
           "menu:eject-engine",
         ),
+      ejectWebTemplate: createSubscribeAPI<(event: IpcRendererEvent) => void>(
+        "menu:eject-web-template",
+      ),
       exportProject: createSubscribeAPI<
         (event: IpcRendererEvent, exportType: ProjectExportType) => void
       >("menu:export-project"),
@@ -562,8 +617,16 @@ const APISetup = {
       font: createWatchSubscribeAPI<FontResourceAsset>("watch:font"),
       avatar: createWatchSubscribeAPI<AvatarResourceAsset>("watch:avatar"),
       emote: createWatchSubscribeAPI<EmoteResourceAsset>("watch:emote"),
-      tileset: createWatchSubscribeAPI<TilesetResourceAsset>("watch:tileset"),
+      tileset:
+        createWatchSubscribeAPI<CompressedTilesetResourceAsset>(
+          "watch:tileset",
+        ),
       ui: createWatchSubscribeAPI<never>("watch:ui"),
+      webTemplates: {
+        changed: createSubscribeAPI<
+          (event: IpcRendererEvent, templates: WebTemplateInfo[]) => void
+        >("watch:webTemplates:changed"),
+      },
       engineSchema: {
         changed: createSubscribeAPI<
           (event: IpcRendererEvent, engineSchema: EngineSchema) => void

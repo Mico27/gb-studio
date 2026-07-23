@@ -28,7 +28,14 @@ import {
   TriggerPrefabNormalized,
   TriggerScriptKey,
 } from "shared/lib/entities/entitiesTypes";
-import { EntityAdapter, EntityId, EntityState } from "@reduxjs/toolkit";
+import {
+  Draft,
+  EntityAdapter,
+  EntityId,
+  EntityState,
+  current,
+  isDraft,
+} from "@reduxjs/toolkit";
 import { genSymbol, toValidSymbol } from "shared/lib/helpers/symbols";
 import { Asset, assetNameFromFilename } from "shared/lib/helpers/assets";
 import l10n from "shared/lib/lang/l10n";
@@ -54,7 +61,6 @@ import {
   extractScriptValueVariables,
 } from "shared/lib/scriptValue/helpers";
 import { ScriptValue, isScriptValue } from "shared/lib/scriptValue/types";
-import { sortByKey } from "shared/lib/helpers/sortByKey";
 import {
   Actor,
   AvatarAsset,
@@ -319,27 +325,78 @@ export const pruneMissingEntities = <T>(
   input: T,
   normalizrSchema?: Schema<unknown>,
 ): T => {
+  if (normalizrSchema === undefined) {
+    return input;
+  }
+
   if (Array.isArray(input)) {
     const itemSchema = getArrayItemSchema(normalizrSchema);
-    const result = input.map((item) => pruneMissingEntities(item, itemSchema));
     if (itemSchema === undefined) {
-      return result as T;
+      return input;
     }
-    return result.filter((item) => item !== undefined && item !== null) as T;
+
+    let changed = false;
+    const result: unknown[] = [];
+
+    for (const item of input) {
+      const prunedItem = pruneMissingEntities(item, itemSchema);
+
+      if (prunedItem === undefined || prunedItem === null) {
+        changed = true;
+        continue;
+      }
+
+      if (prunedItem !== item) {
+        changed = true;
+      }
+
+      result.push(prunedItem);
+    }
+
+    return (changed ? result : input) as T;
   }
 
   if (input !== null && typeof input === "object") {
-    const objectSchema = getObjectSchema(normalizrSchema);
     const valuesSchema = getValuesSchema(normalizrSchema);
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(input)) {
-      result[key] = pruneMissingEntities(
-        value,
-        valuesSchema ?? objectSchema?.[key],
-      );
+    const inputObject = input as Record<string, unknown>;
+    if (valuesSchema !== undefined) {
+      let result: Record<string, unknown> | undefined;
+
+      for (const [key, value] of Object.entries(inputObject)) {
+        const prunedValue = pruneMissingEntities(value, valuesSchema);
+
+        if (prunedValue !== value) {
+          result ??= { ...inputObject };
+          result[key] = prunedValue;
+        }
+      }
+
+      return (result ?? input) as T;
     }
 
-    return result as T;
+    const objectSchema = getObjectSchema(normalizrSchema);
+
+    if (objectSchema === undefined) {
+      return input;
+    }
+
+    let result: Record<string, unknown> | undefined;
+
+    for (const [key, childSchema] of Object.entries(objectSchema)) {
+      if (!(key in inputObject)) {
+        continue;
+      }
+
+      const value = inputObject[key];
+      const prunedValue = pruneMissingEntities(value, childSchema);
+
+      if (prunedValue !== value) {
+        result ??= { ...inputObject };
+        result[key] = prunedValue;
+      }
+    }
+
+    return (result ?? input) as T;
   }
 
   return input;
@@ -583,12 +640,20 @@ const hasValidInode = (
   return typeof asset.inode === "string" && asset.inode.length > 0;
 };
 
+const isImmerDraft = <T>(value: T | Draft<T>): value is Draft<T> => {
+  return isDraft(value);
+};
+
+const currentIfDraft = <T>(value: T | Draft<T>): T => {
+  return isImmerDraft(value) ? current(value) : value;
+};
+
 const cacheAssetByInode = <T extends Asset & { inode: string }>(asset: T) => {
   if (!hasValidInode(asset)) {
     return;
   }
 
-  inodeToAssetCache[asset.inode] = cloneDeep(asset);
+  inodeToAssetCache[asset.inode] = cloneDeep(currentIfDraft(asset));
 };
 
 const takeCachedAsset = <T extends Asset & { inode: string }>(
@@ -643,13 +708,15 @@ export const isUnionVariableValue = (
 export const isUnionPropertyValue = (
   input: unknown,
 ): input is UnionPropertyValue => {
-  if (!isUnionValue(input)) {
+  if (!isUnionValue(input) || input.type !== "property") {
     return false;
   }
-  if (input.type !== "property") {
-    return false;
-  }
-  return true;
+
+  return (
+    !("value" in input) ||
+    input.value === undefined ||
+    typeof input.value === "string"
+  );
 };
 
 export const toVariableNumber = (variable: string) => {
@@ -1242,7 +1309,12 @@ export const updateCustomEventArgs = (
     },
   );
 
-  customEvent.variables = sortByKey(variables);
+  customEvent.variables = Object.fromEntries(
+    // Sort variables in ID order
+    Object.entries(variables).sort(
+      ([a], [b]) => Number(a.slice(1)) - Number(b.slice(1)),
+    ),
+  );
   customEvent.actors = actors;
 };
 

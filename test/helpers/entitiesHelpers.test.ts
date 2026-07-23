@@ -230,8 +230,8 @@ describe("ensureEntitySymbolsUnique", () => {
     };
     const seenSymbols = new Set<string>();
     ensureEntitySymbolsUnique(state, seenSymbols);
-    expect(state.entities.e1.symbol).toBe("entity");
-    expect(state.entities.e2.symbol).toBe("entity_0");
+    expect(state.entities.e1?.symbol).toBe("entity");
+    expect(state.entities.e2?.symbol).toBe("entity_0");
   });
 
   test("Should not modify symbols that are already unique", () => {
@@ -250,8 +250,8 @@ describe("ensureEntitySymbolsUnique", () => {
     };
     const seenSymbols = new Set<string>();
     ensureEntitySymbolsUnique(state, seenSymbols);
-    expect(state.entities.e1.symbol).toBe("entity1");
-    expect(state.entities.e2.symbol).toBe("entity2");
+    expect(state.entities.e1?.symbol).toBe("entity1");
+    expect(state.entities.e2?.symbol).toBe("entity2");
   });
 
   test("Should ensure unique symbols for entities when current symbol isn't defined", () => {
@@ -268,8 +268,8 @@ describe("ensureEntitySymbolsUnique", () => {
     };
     const seenSymbols = new Set<string>();
     ensureEntitySymbolsUnique(state, seenSymbols);
-    expect(state.entities.e1.symbol).toBe("symbol");
-    expect(state.entities.e2.symbol).toBe("symbol_0");
+    expect(state.entities.e1?.symbol).toBe("symbol");
+    expect(state.entities.e2?.symbol).toBe("symbol_0");
   });
 
   test("Should ensure unique symbols for entities when current symbol is an empty string", () => {
@@ -288,8 +288,8 @@ describe("ensureEntitySymbolsUnique", () => {
     };
     const seenSymbols = new Set<string>();
     ensureEntitySymbolsUnique(state, seenSymbols);
-    expect(state.entities.e1.symbol).toBe("symbol");
-    expect(state.entities.e2.symbol).toBe("symbol_0");
+    expect(state.entities.e1?.symbol).toBe("symbol");
+    expect(state.entities.e2?.symbol).toBe("symbol_0");
   });
 });
 
@@ -708,6 +708,51 @@ describe("updateCustomEventArgs", () => {
       },
     });
   });
+
+  test("Should sort variables by id", () => {
+    const customEvent = {
+      id: "customEvent1",
+      name: "Custom Event 1",
+      description: "",
+      symbol: "custom_event_1",
+      variables: {},
+      actors: {},
+      script: ["event1", "event2"],
+    } as Parameters<typeof updateCustomEventArgs>[0];
+
+    updateCustomEventArgs(
+      customEvent,
+      {
+        event1: {
+          id: "event1",
+          command: "EVENT_INC_VALUE",
+          args: {
+            variable: "V5",
+          },
+        },
+        event2: {
+          id: "event2",
+          command: "EVENT_INC_VALUE",
+          args: {
+            variable: "V3",
+          },
+        },
+      },
+      {
+        EVENT_INC_VALUE: {
+          id: "EVENT_INC_VALUE",
+          fieldsLookup: {
+            variable: {
+              key: "variable",
+              type: "variable",
+            },
+          },
+        },
+      } as never,
+    );
+
+    expect(Object.keys(customEvent.variables)).toEqual(["V3", "V5"]);
+  });
 });
 
 describe("applyReparentFolderToCollection", () => {
@@ -721,8 +766,8 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "folder/file.txt", "newFolder");
 
-    expect(collection.a.name).toBe("folder/file.txt");
-    expect(collection.b.name).toBe("folder/other.txt");
+    expect(collection.a?.name).toBe("folder/file.txt");
+    expect(collection.b?.name).toBe("folder/other.txt");
   });
 
   test("should move all files within folder", () => {
@@ -735,10 +780,10 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "a", "x");
 
-    expect(collection.a.name).toBe("a");
-    expect(collection.b.name).toBe("x/a/file.txt");
-    expect(collection.c.name).toBe("x/a/sub/file2.txt");
-    expect(collection.d.name).toBe("other/file3.txt");
+    expect(collection.a?.name).toBe("a");
+    expect(collection.b?.name).toBe("x/a/file.txt");
+    expect(collection.c?.name).toBe("x/a/sub/file2.txt");
+    expect(collection.d?.name).toBe("other/file3.txt");
   });
 
   test("should move nested folder and its contents correctly", () => {
@@ -750,9 +795,9 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "root/a", "x/y");
 
-    expect(collection.a.name).toBe("root/a");
-    expect(collection.b.name).toBe("x/y/a/file.txt");
-    expect(collection.c.name).toBe("x/y/a/sub/file2.txt");
+    expect(collection.a?.name).toBe("root/a");
+    expect(collection.b?.name).toBe("x/y/a/file.txt");
+    expect(collection.c?.name).toBe("x/y/a/sub/file2.txt");
   });
 
   test("should allow moving folder to root", () => {
@@ -763,8 +808,8 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "a", "");
 
-    expect(collection.a.name).toBe("a");
-    expect(collection.b.name).toBe("a/file.txt");
+    expect(collection.a?.name).toBe("a");
+    expect(collection.b?.name).toBe("a/file.txt");
   });
 
   test("should do nothing if draggedPath does not match anything", () => {
@@ -775,8 +820,8 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "x", "y");
 
-    expect(collection.a.name).toBe("a/file.txt");
-    expect(collection.b.name).toBe("b/file.txt");
+    expect(collection.a?.name).toBe("a/file.txt");
+    expect(collection.b?.name).toBe("b/file.txt");
   });
 
   test("should ignore undefined entries in collection", () => {
@@ -797,7 +842,7 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "a", "x");
 
-    expect(collection.a.name).toBe("x/a/file.txt");
+    expect(collection.a?.name).toBe("x/a/file.txt");
   });
 
   test("should not partially match similar prefixes", () => {
@@ -807,7 +852,7 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "folder", "x");
 
-    expect(collection.a.name).toBe("folderA/file.txt");
+    expect(collection.a?.name).toBe("folderA/file.txt");
   });
 
   test("should not allow moving folder into itself", () => {
@@ -817,7 +862,7 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "a", "a");
 
-    expect(collection.a.name).toBe("a/file.txt");
+    expect(collection.a?.name).toBe("a/file.txt");
   });
 
   test("should not allow moving folder into its descendant", () => {
@@ -827,7 +872,7 @@ describe("applyReparentFolderToCollection", () => {
 
     applyReparentFolderToCollection(collection, "a", "a/b");
 
-    expect(collection.a.name).toBe("a/file.txt");
+    expect(collection.a?.name).toBe("a/file.txt");
   });
 });
 
@@ -842,8 +887,8 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "x");
 
-    expect(collection.a.name).toBe("x/file.txt");
-    expect(collection.b.name).toBe("other/file2.txt");
+    expect(collection.a?.name).toBe("x/file.txt");
+    expect(collection.b?.name).toBe("other/file2.txt");
   });
 
   test("should move named entity to deep folder", () => {
@@ -853,7 +898,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "x/y/z");
 
-    expect(collection.a.name).toBe("x/y/z/file.txt");
+    expect(collection.a?.name).toBe("x/y/z/file.txt");
   });
 
   test("should move named entity to root (empty path)", () => {
@@ -863,7 +908,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "");
 
-    expect(collection.a.name).toBe("file.txt");
+    expect(collection.a?.name).toBe("file.txt");
   });
 
   test("should normalize during reparenting", () => {
@@ -873,7 +918,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "\\x//y\\");
 
-    expect(collection.a.name).toBe("x/y/file.txt");
+    expect(collection.a?.name).toBe("x/y/file.txt");
   });
 
   test("should handle unnamed entity (trailing slash)", () => {
@@ -883,7 +928,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "x");
 
-    expect(collection.a.name).toBe("x/");
+    expect(collection.a?.name).toBe("x/");
   });
 
   test("should handle unnamed entity moved to deep folder", () => {
@@ -893,7 +938,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "x/y");
 
-    expect(collection.a.name).toBe("x/y/");
+    expect(collection.a?.name).toBe("x/y/");
   });
 
   test("should handle unnamed entity moved to root", () => {
@@ -903,7 +948,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "");
 
-    expect(collection.a.name).toBe("");
+    expect(collection.a?.name).toBe("");
   });
 
   test("should do nothing if id does not exist", () => {
@@ -913,7 +958,7 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "missing", "x");
 
-    expect(collection.a.name).toBe("a/file.txt");
+    expect(collection.a?.name).toBe("a/file.txt");
   });
 
   test("should do nothing if entry is undefined", () => {
@@ -934,8 +979,8 @@ describe("applyReparentEntityToCollection", () => {
 
     applyReparentEntityToCollection(collection, "a", "x");
 
-    expect(collection.a.name).toBe("x/file.txt");
-    expect(collection.b.name).toBe("b/file.txt");
+    expect(collection.a?.name).toBe("x/file.txt");
+    expect(collection.b?.name).toBe("b/file.txt");
   });
 });
 
@@ -1257,5 +1302,188 @@ describe("pruneMissingEntities", () => {
         },
       },
     ]);
+  });
+
+  test("does not traverse or clone fields not defined in the schema", () => {
+    const stateSchema = new schema.Entity("states");
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    const unschemaData = {
+      nullableValues: [null, undefined, "keep-me"],
+      nested: {
+        expensiveArray: [1, 2, 3],
+      },
+    };
+
+    const input = {
+      id: "sprite1",
+      states: [{ id: "state1" }],
+      unschemaData,
+    };
+
+    const result = pruneMissingEntities(input, spriteSchema);
+
+    expect(result).toEqual(input);
+    expect(result.unschemaData).toBe(unschemaData);
+    expect(result.unschemaData.nested).toBe(unschemaData.nested);
+    expect(result.unschemaData.nested.expensiveArray).toBe(
+      unschemaData.nested.expensiveArray,
+    );
+  });
+
+  test("preserves schema-defined array identity when no pruning is needed", () => {
+    const stateSchema = new schema.Entity("states");
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    const states = [{ id: "state1" }, { id: "state2" }];
+    const input = {
+      id: "sprite1",
+      states,
+    };
+
+    const result = pruneMissingEntities(input, spriteSchema);
+
+    expect(result).toEqual(input);
+    expect(result).toBe(input);
+    expect(result.states).toBe(states);
+  });
+
+  test("clones only the schema-defined path that changed", () => {
+    const stateSchema = new schema.Entity("states");
+    const spriteSchema = new schema.Entity("sprites", {
+      states: [stateSchema],
+    });
+
+    const metadata = {
+      expensiveArray: [1, 2, 3],
+    };
+
+    const states = [undefined, { id: "state1" }];
+    const input = {
+      id: "sprite1",
+      states,
+      metadata,
+    };
+
+    const result = pruneMissingEntities(input, spriteSchema);
+
+    expect(result).toEqual({
+      id: "sprite1",
+      states: [{ id: "state1" }],
+      metadata,
+    });
+
+    expect(result).not.toBe(input);
+    expect(result.states).not.toBe(states);
+    expect(result.metadata).toBe(metadata);
+  });
+
+  test("plain object schema does not traverse unrelated fields", () => {
+    const itemSchema = new schema.Entity("items");
+
+    const values = [null, undefined, "keep-me"];
+    const unrelated = {
+      deep: {
+        values,
+      },
+    };
+
+    const input = {
+      items: [{ id: "item1" }],
+      unrelated,
+    };
+
+    const result = pruneMissingEntities(input, {
+      items: [itemSchema],
+    });
+
+    expect(result).toBe(input);
+    expect(result.unrelated).toBe(unrelated);
+    expect(result.unrelated.deep.values).toBe(values);
+  });
+
+  test("preserves Values schema object identity when no pruning is needed", () => {
+    const scriptEventSchema = new schema.Entity("scriptEvents");
+    scriptEventSchema.define({
+      children: new schema.Values([scriptEventSchema]),
+    });
+
+    const trueBranch = [{ id: "child1", command: "EVENT_END" }];
+    const children = {
+      true: trueBranch,
+      false: [],
+    };
+
+    const input = {
+      id: "event1",
+      command: "EVENT_IF_TRUE",
+      children,
+    };
+
+    const result = pruneMissingEntities(input, scriptEventSchema);
+
+    expect(result).toBe(input);
+    expect(result.children).toBe(children);
+    expect(result.children.true).toBe(trueBranch);
+  });
+
+  test("Values schema clones only branches that need pruning", () => {
+    const scriptEventSchema = new schema.Entity("scriptEvents");
+    scriptEventSchema.define({
+      children: new schema.Values([scriptEventSchema]),
+    });
+
+    const falseBranch = [{ id: "child2", command: "EVENT_END" }];
+    const children = {
+      true: [undefined, { id: "child1", command: "EVENT_END" }],
+      false: falseBranch,
+    };
+
+    const input = {
+      id: "event1",
+      command: "EVENT_IF_TRUE",
+      children,
+    };
+
+    const result = pruneMissingEntities(input, scriptEventSchema);
+
+    expect(result).toEqual({
+      id: "event1",
+      command: "EVENT_IF_TRUE",
+      children: {
+        true: [{ id: "child1", command: "EVENT_END" }],
+        false: falseBranch,
+      },
+    });
+
+    expect(result).not.toBe(input);
+    expect(result.children).not.toBe(children);
+    expect(result.children.false).toBe(falseBranch);
+  });
+
+  test("does not access items inside large arrays when the field is not schema-defined", () => {
+    const itemSchema = new schema.Entity("items");
+
+    const dangerousItem = {};
+    Object.defineProperty(dangerousItem, "value", {
+      get() {
+        throw new Error("Should not be read");
+      },
+    });
+
+    const input = {
+      items: [{ id: "item1" }],
+      tileData: [dangerousItem],
+    };
+
+    expect(() =>
+      pruneMissingEntities(input, {
+        items: [itemSchema],
+      }),
+    ).not.toThrow();
   });
 });

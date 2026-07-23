@@ -4,8 +4,8 @@ import React, {
   useEffect,
   useRef,
   useState,
+  useLayoutEffect,
 } from "react";
-import { useLayoutEffect } from "react";
 import { AutoFocusInside } from "react-focus-lock";
 import { Button } from "ui/buttons/Button";
 import useResizeObserver from "ui/hooks/use-resize-observer";
@@ -14,6 +14,7 @@ import {
   StyledCredits,
   StyledCreditsCloseButton,
   StyledCreditsContent,
+  StyledCreditsDragRegion,
   StyledCreditsGrid,
   StyledCreditsPerson,
   StyledCreditsSubHeading,
@@ -85,6 +86,7 @@ export const Credits = ({ onClose, duration = 60, children }: CreditsProps) => {
       <StyledCreditsContent $duration={duration} $paused={paused}>
         {children}
       </StyledCreditsContent>
+      <CreditsDragRegion />
       {onClose && (
         <StyledCreditsCloseButton>
           <AutoFocusInside>
@@ -148,6 +150,10 @@ interface CreditsGridProps {
 
 export const CreditsGrid = ({ children }: CreditsGridProps) => {
   return <StyledCreditsGrid children={children} />;
+};
+
+export const CreditsDragRegion = () => {
+  return <StyledCreditsDragRegion />;
 };
 
 const CreditsBackground = () => {

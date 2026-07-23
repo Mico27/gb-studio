@@ -38,7 +38,7 @@ test("should include default font when provided", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedFonts).toHaveLength(1);
-  expect(usedAssets.referencedFonts[0].id).toBe("font2");
+  expect(usedAssets.referencedFonts[0]?.id).toBe("font2");
 });
 
 test("should include first font when default not provided", async () => {
@@ -65,7 +65,35 @@ test("should include first font when default not provided", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedFonts).toHaveLength(1);
-  expect(usedAssets.referencedFonts[0].id).toBe("font1");
+  expect(usedAssets.referencedFonts[0]?.id).toBe("font1");
+});
+
+test("should not include an image background for a tilemap scene", async () => {
+  const projectData = {
+    ...dummyProjectResources,
+    scenes: [
+      {
+        ...dummySceneResource,
+        id: "tilemap_scene",
+        backgroundId: "image_background",
+        tilemap: {
+          tilesets: [],
+          tileColors: [],
+          layers: [],
+        },
+      },
+    ] as SceneResource[],
+  } as ProjectResources;
+  const scriptEventHandlers = await getTestScriptHandlers();
+
+  const usedAssets = determineUsedAssets({
+    projectData,
+    customEventsLookup: {} as Record<string, Script>,
+    scriptEventHandlers,
+    warnings: () => {},
+  });
+
+  expect(usedAssets.referencedBackgrounds).toHaveLength(0);
 });
 
 test("should include fonts referenced in gbvm script blocks", async () => {
@@ -113,8 +141,8 @@ test("should include fonts referenced in gbvm script blocks", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedFonts).toHaveLength(2);
-  expect(usedAssets.referencedFonts[0].id).toBe("font1");
-  expect(usedAssets.referencedFonts[1].id).toBe("font3");
+  expect(usedAssets.referencedFonts[0]?.id).toBe("font1");
+  expect(usedAssets.referencedFonts[1]?.id).toBe("font3");
 });
 
 test("should include fonts referenced in dialogue", async () => {
@@ -157,10 +185,10 @@ test("should include fonts referenced in dialogue", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedFonts).toHaveLength(2);
-  expect(usedAssets.referencedFonts[0].id).toBe(
+  expect(usedAssets.referencedFonts[0]?.id).toBe(
     "3060ae1a-dde6-47f7-af40-5a28bba5a649",
   );
-  expect(usedAssets.referencedFonts[1].id).toBe(
+  expect(usedAssets.referencedFonts[1]?.id).toBe(
     "4bd653f0-e08d-424e-9e5b-c1f3aaa21e47",
   );
 });
@@ -211,7 +239,7 @@ test("should include sound from play sound effect", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedSounds).toHaveLength(1);
-  expect(usedAssets.referencedSounds[0].id).toBe(
+  expect(usedAssets.referencedSounds[0]?.id).toBe(
     "3060ae1a-dde6-47f7-af40-5a28bba5a649",
   );
 });
@@ -255,7 +283,7 @@ test("should include sound from text sound effect", async () => {
     warnings: () => {},
   });
   expect(usedAssets.referencedSounds).toHaveLength(1);
-  expect(usedAssets.referencedSounds[0].id).toBe(
+  expect(usedAssets.referencedSounds[0]?.id).toBe(
     "3060ae1a-dde6-47f7-af40-5a28bba5a649",
   );
 });

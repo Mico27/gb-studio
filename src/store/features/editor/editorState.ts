@@ -15,6 +15,8 @@ import {
   DRAG_PLAYER,
   BRUSH_SLOPE,
   MAX_ZOOM_LEVEL,
+  BRUSH_SELECTION,
+  TOOL_TILES,
 } from "consts";
 import { zoomIn, zoomOut } from "shared/lib/helpers/zoom";
 import { ScriptEventParentType } from "shared/lib/entities/entitiesTypes";
@@ -28,6 +30,8 @@ import type { NavigationSection } from "store/features/navigation/navigationStat
 import type { RootState } from "store/storeTypes";
 import { selectScriptIds } from "store/features/entities/entitiesState";
 import { Variable } from "shared/lib/resources/types";
+import { ActionTypes } from "redux-undo";
+import type { GridOffset, GridSelection } from "shared/lib/tiles/grid";
 
 export type Tool =
   | "triggers"
@@ -37,9 +41,10 @@ export type Tool =
   | "scene"
   | "note"
   | "eraser"
+  | "tiles"
   | "select";
 
-export type Brush = "8px" | "16px" | "fill" | "magic" | "slope";
+export type Brush = "8px" | "16px" | "fill" | "magic" | "slope" | "selection";
 
 export type EditorSelectionType =
   | "world"
@@ -53,6 +58,22 @@ export type EditorSelectionType =
   | "actorPrefab"
   | "triggerPrefab";
 
+export type EditorDragState =
+  | {
+      type: typeof DRAG_ACTOR;
+      actorId: string;
+      offsetX: number;
+      offsetY: number;
+    }
+  | {
+      type: typeof DRAG_TRIGGER;
+      triggerId: string;
+      offsetX: number;
+      offsetY: number;
+    }
+  | { type: typeof DRAG_DESTINATION; eventId: string }
+  | { type: typeof DRAG_PLAYER };
+
 export const zoomSections = [
   "world",
   "sprites",
@@ -62,6 +83,19 @@ export const zoomSections = [
 ] as const;
 
 export type ZoomSection = (typeof zoomSections)[number];
+
+export type NavigatorSearchKey =
+  | "backgrounds"
+  | "constants"
+  | "customEvents"
+  | "palettes"
+  | "prefabs"
+  | "scenes"
+  | "songs"
+  | "sounds"
+  | "sprites"
+  | "tilesets"
+  | "variables";
 
 export interface SpriteTileSelection {
   x: number;
@@ -79,6 +113,25 @@ export interface SlopePreview {
   endY: number;
   offset: boolean;
   slopeIncline: SlopeIncline;
+}
+
+export type SceneGridSelectionMode = "tiles" | "collisions" | "colors";
+
+export interface ScenePaintSelection {
+  sceneId: string;
+  layerId?: string;
+  mode: SceneGridSelectionMode;
+  selection: GridSelection;
+  offset: GridOffset;
+}
+
+export interface SelectedSceneTile {
+  tilesetId: string;
+  tileIndex: number;
+  width: number;
+  height: number;
+  tilesetWidth: number;
+  autotile: boolean;
 }
 
 export interface EditorState {
@@ -102,7 +155,7 @@ export interface EditorState {
   zoomImage: number;
   zoomUI: number;
   zoomSpriteTiles: number;
-  dragging: string;
+  dragging?: EditorDragState;
   sceneDragging: boolean;
   sceneDragX: number;
   sceneDragY: number;
@@ -121,6 +174,10 @@ export interface EditorState {
   selectedPalette: number;
   selectedTileType: number;
   selectedTileMask: number;
+  selectedSceneTile?: SelectedSceneTile;
+  selectedTilemapLayerId: string;
+  sceneAddType: "image" | "tilemap";
+  scenePaintEraser: boolean;
   selectedBrush: Brush;
   showLayers: boolean;
   lastScriptTab: string;
@@ -133,6 +190,7 @@ export interface EditorState {
   filesSidebarWidth: number;
   navigatorSplitSizes: number[];
   navigatorSplitSizesManuallyEdited: boolean;
+  navigatorSearch: Record<NavigatorSearchKey, string | undefined>;
   focusSceneId: string;
   selectedSpriteSheetId: string;
   selectedSpriteStateId: string;
@@ -154,6 +212,7 @@ export interface EditorState {
   showScriptUses: boolean;
   prefabId: string;
   settingsScrollTop: number;
+  scenePaintSelection?: ScenePaintSelection;
 }
 
 export const initialState: EditorState = {
@@ -176,7 +235,7 @@ export const initialState: EditorState = {
   zoomImage: 200,
   zoomUI: 200,
   zoomSpriteTiles: 400,
-  dragging: "",
+  dragging: undefined,
   sceneDragging: false,
   sceneDragX: 0,
   sceneDragY: 0,
@@ -195,6 +254,10 @@ export const initialState: EditorState = {
   selectedPalette: 0,
   selectedTileType: COLLISION_ALL,
   selectedTileMask: 0xff,
+  selectedSceneTile: undefined,
+  selectedTilemapLayerId: "",
+  sceneAddType: "image",
+  scenePaintEraser: false,
   selectedBrush: BRUSH_8PX,
   showLayers: true,
   lastScriptTab: "",
@@ -208,6 +271,19 @@ export const initialState: EditorState = {
   clipboardVariables: [],
   navigatorSplitSizes: [400, 30, 30, 30, 30],
   navigatorSplitSizesManuallyEdited: false,
+  navigatorSearch: {
+    backgrounds: undefined,
+    constants: undefined,
+    customEvents: undefined,
+    palettes: undefined,
+    prefabs: undefined,
+    scenes: undefined,
+    songs: undefined,
+    sounds: undefined,
+    sprites: undefined,
+    tilesets: undefined,
+    variables: undefined,
+  },
   focusSceneId: "",
   selectedSpriteSheetId: "",
   selectedSpriteStateId: "",
@@ -228,6 +304,7 @@ export const initialState: EditorState = {
   showScriptUses: false,
   prefabId: "",
   settingsScrollTop: 0,
+  scenePaintSelection: undefined,
 };
 
 const toggleEntitySelection = (
@@ -330,14 +407,40 @@ const editorSlice = createSlice({
   reducers: {
     setTool: (state, action: PayloadAction<{ tool: Tool }>) => {
       state.tool = action.payload.tool;
+      if (
+        action.payload.tool === "collisions" ||
+        action.payload.tool === "colors" ||
+        action.payload.tool === "tiles"
+      ) {
+        state.scenePaintEraser = false;
+      }
       state.pasteMode = false;
       state.prefabId = "";
+      if (
+        state.scenePaintSelection &&
+        state.scenePaintSelection.mode !== action.payload.tool
+      ) {
+        state.scenePaintSelection = undefined;
+      }
       // Reset to 8px brush is current brush not supported
       if (
-        state.selectedBrush === BRUSH_SLOPE &&
-        action.payload.tool !== "collisions"
+        (state.selectedBrush === BRUSH_SLOPE &&
+          action.payload.tool !== "collisions") ||
+        (state.selectedBrush === BRUSH_SELECTION &&
+          action.payload.tool !== "tiles" &&
+          action.payload.tool !== "collisions" &&
+          action.payload.tool !== "colors")
       ) {
         state.selectedBrush = BRUSH_8PX;
+      }
+      // If switching to tile paint, select scene if possible
+      if (
+        state.tool === TOOL_TILES &&
+        (state.type === "actor" || state.type === "trigger") &&
+        state.scene
+      ) {
+        state.type = "scene";
+        state.entityId = "";
       }
     },
 
@@ -345,8 +448,26 @@ const editorSlice = createSlice({
       state.pasteMode = action.payload;
     },
 
+    setSceneAddType: (state, action: PayloadAction<"image" | "tilemap">) => {
+      state.sceneAddType = action.payload;
+    },
+
     setBrush: (state, action: PayloadAction<{ brush: Brush }>) => {
       state.selectedBrush = action.payload.brush;
+      if (
+        action.payload.brush === BRUSH_SELECTION ||
+        action.payload.brush === BRUSH_SLOPE
+      ) {
+        state.scenePaintEraser = false;
+      }
+      if (action.payload.brush === BRUSH_SELECTION) {
+        if (state.selectedSceneTile) {
+          state.selectedSceneTile.autotile = false;
+        }
+      }
+      if (action.payload.brush !== BRUSH_SELECTION) {
+        state.scenePaintSelection = undefined;
+      }
     },
 
     setSelectedPalette: (
@@ -354,6 +475,10 @@ const editorSlice = createSlice({
       action: PayloadAction<{ paletteIndex: number }>,
     ) => {
       state.selectedPalette = action.payload.paletteIndex;
+      state.scenePaintEraser = false;
+      if (state.selectedBrush === BRUSH_SELECTION) {
+        state.selectedBrush = BRUSH_8PX;
+      }
     },
 
     setSelectedTileType: (
@@ -362,6 +487,48 @@ const editorSlice = createSlice({
     ) => {
       state.selectedTileType = action.payload.tileType;
       state.selectedTileMask = action.payload.tileMask;
+      state.scenePaintEraser = false;
+    },
+
+    setSelectedSceneTile: (
+      state,
+      action: PayloadAction<{
+        tilesetId: string;
+        tileIndex: number;
+        width?: number;
+        height?: number;
+        tilesetWidth?: number;
+      }>,
+    ) => {
+      state.selectedSceneTile = {
+        tilesetId: action.payload.tilesetId,
+        tileIndex: action.payload.tileIndex,
+        width: action.payload.width ?? 1,
+        height: action.payload.height ?? 1,
+        tilesetWidth: action.payload.tilesetWidth ?? 0,
+        autotile: state.selectedSceneTile?.autotile ?? false,
+      };
+      state.scenePaintEraser = false;
+      if (state.selectedBrush === BRUSH_SELECTION) {
+        state.selectedBrush = BRUSH_8PX;
+      }
+    },
+
+    setSelectedTilemapLayerId: (state, action: PayloadAction<string>) => {
+      state.selectedTilemapLayerId = action.payload;
+    },
+
+    setSelectedSceneTileAutotile: (state, action: PayloadAction<boolean>) => {
+      if (state.selectedSceneTile) {
+        state.selectedSceneTile.autotile = action.payload;
+      }
+    },
+
+    setScenePaintEraser: (state, action: PayloadAction<boolean>) => {
+      state.scenePaintEraser = action.payload;
+      if (action.payload && state.selectedBrush === BRUSH_SLOPE) {
+        state.selectedBrush = BRUSH_8PX;
+      }
     },
 
     setShowLayers: (state, action: PayloadAction<{ showLayers: boolean }>) => {
@@ -387,6 +554,7 @@ const editorSlice = createSlice({
       state.type = "world";
       state.worldFocus = true;
       state.sceneSelectionIds = [];
+      state.scenePaintSelection = undefined;
     },
 
     selectSidebar: (state, _action: PayloadAction<void>) => {
@@ -410,7 +578,7 @@ const editorSlice = createSlice({
         x: action.payload.x,
         y: action.payload.y,
       };
-      state.eventId = state.dragging === "" ? "" : state.eventId;
+      state.eventId = state.dragging ? state.eventId : "";
     },
 
     selectScriptEvent: (
@@ -455,6 +623,7 @@ const editorSlice = createSlice({
       state.previewAsSceneId = action.payload.sceneId;
       state.worldFocus = true;
       state.entityId = "";
+      state.scenePaintSelection = undefined;
       if (!state.sceneSelectionIds.includes(state.scene)) {
         state.sceneSelectionIds = [action.payload.sceneId];
       }
@@ -466,6 +635,7 @@ const editorSlice = createSlice({
       state.scene = "";
       state.entityId = action.payload.noteId;
       state.searchTerm = "";
+      state.scenePaintSelection = undefined;
       if (!state.sceneSelectionIds.includes(state.entityId)) {
         state.sceneSelectionIds = [action.payload.noteId];
       }
@@ -545,10 +715,20 @@ const editorSlice = createSlice({
 
     dragTriggerStart: (
       state,
-      action: PayloadAction<{ triggerId: string; sceneId: string }>,
+      action: PayloadAction<{
+        triggerId: string;
+        sceneId: string;
+        offsetX: number;
+        offsetY: number;
+      }>,
     ) => {
       state.type = "trigger";
-      state.dragging = DRAG_TRIGGER;
+      state.dragging = {
+        type: DRAG_TRIGGER,
+        triggerId: action.payload.triggerId,
+        offsetX: action.payload.offsetX,
+        offsetY: action.payload.offsetY,
+      };
       state.entityId = action.payload.triggerId;
       state.scene = action.payload.sceneId;
       state.worldFocus = true;
@@ -559,15 +739,25 @@ const editorSlice = createSlice({
     },
 
     dragTriggerStop: (state, _action: PayloadAction<void>) => {
-      state.dragging = "";
+      state.dragging = undefined;
     },
 
     dragActorStart: (
       state,
-      action: PayloadAction<{ actorId: string; sceneId: string }>,
+      action: PayloadAction<{
+        actorId: string;
+        sceneId: string;
+        offsetX: number;
+        offsetY: number;
+      }>,
     ) => {
       state.type = "actor";
-      state.dragging = DRAG_ACTOR;
+      state.dragging = {
+        type: DRAG_ACTOR,
+        actorId: action.payload.actorId,
+        offsetX: action.payload.offsetX,
+        offsetY: action.payload.offsetY,
+      };
       state.entityId = action.payload.actorId;
       state.scene = action.payload.sceneId;
       state.worldFocus = true;
@@ -578,7 +768,7 @@ const editorSlice = createSlice({
     },
 
     dragActorStop: (state, _action: PayloadAction<void>) => {
-      state.dragging = "";
+      state.dragging = undefined;
     },
 
     dragDestinationStart: (
@@ -591,7 +781,10 @@ const editorSlice = createSlice({
       }>,
     ) => {
       state.eventId = action.payload.eventId;
-      state.dragging = DRAG_DESTINATION;
+      state.dragging = {
+        type: DRAG_DESTINATION,
+        eventId: action.payload.eventId,
+      };
       state.type = action.payload.selectionType;
       state.entityId = action.payload.entityId;
       state.scene = action.payload.sceneId;
@@ -600,16 +793,16 @@ const editorSlice = createSlice({
 
     dragDestinationStop: (state, _action: PayloadAction<void>) => {
       state.eventId = "";
-      state.dragging = "";
+      state.dragging = undefined;
     },
 
     dragPlayerStart: (state, _action: PayloadAction<void>) => {
-      state.dragging = DRAG_PLAYER;
+      state.dragging = { type: DRAG_PLAYER };
       state.worldFocus = true;
     },
 
     dragPlayerStop: (state, _action: PayloadAction<void>) => {
-      state.dragging = "";
+      state.dragging = undefined;
     },
 
     zoomIn: (
@@ -725,6 +918,25 @@ const editorSlice = createSlice({
       state.searchTerm = action.payload;
       state.focusSceneId = "";
       state.sceneSelectionIds = [];
+    },
+
+    setNavigatorSearchTerm: (
+      state,
+      action: PayloadAction<{
+        key: NavigatorSearchKey;
+        searchTerm: string;
+      }>,
+    ) => {
+      state.navigatorSearch[action.payload.key] = action.payload.searchTerm;
+    },
+
+    toggleNavigatorSearch: (
+      state,
+      action: PayloadAction<NavigatorSearchKey>,
+    ) => {
+      const searchTerm = state.navigatorSearch[action.payload];
+      state.navigatorSearch[action.payload] =
+        searchTerm === undefined ? "" : undefined;
     },
 
     setScriptTab: (state, action: PayloadAction<string>) => {
@@ -1019,6 +1231,12 @@ const editorSlice = createSlice({
     setSettingsScrollTop: (state, action: PayloadAction<number>) => {
       state.settingsScrollTop = action.payload;
     },
+    setScenePaintSelection: (
+      state,
+      action: PayloadAction<ScenePaintSelection | undefined>,
+    ) => {
+      state.scenePaintSelection = action.payload;
+    },
   },
   extraReducers: (builder) =>
     builder
@@ -1110,7 +1328,7 @@ const editorSlice = createSlice({
         state.scene = "";
         state.entityId = action.payload.constantId;
       })
-      .addCase(entitiesActions.moveActorToPx, (state, action) => {
+      .addCase(entitiesActions.moveActor, (state, action) => {
         if (state.scene !== action.payload.newSceneId) {
           state.scene = action.payload.newSceneId;
           state.worldFocus = true;
@@ -1165,6 +1383,15 @@ const editorSlice = createSlice({
           action.payload.resources.settings?.worldScrollX || state.worldScrollX;
         state.worldScrollY =
           action.payload.resources.settings?.worldScrollY || state.worldScrollY;
+        state.selectedSceneTile = {
+          tilesetId:
+            action.payload.resources.settings?.selectedSceneTilesetId ?? "",
+          tileIndex: 0,
+          width: 1,
+          height: 1,
+          tilesetWidth: 0,
+          autotile: false,
+        };
         if (
           initialState.navigatorSplitSizes.length ===
           action.payload.resources.settings?.navigatorSplitSizes?.length
@@ -1208,6 +1435,11 @@ const editorSlice = createSlice({
           state.replaceSpriteTileMode = undefined;
         },
       )
+      // Remove script event selection when events are deleted
+      .addCase(entitiesActions.removeScriptEvents, (state, _action) => {
+        state.scriptEventSelectionIds = [];
+        state.scriptEventSelectionParentId = "";
+      })
       // When UI changes increment UI version number
       .addMatcher(
         (action): action is UnknownAction =>
@@ -1221,7 +1453,8 @@ const editorSlice = createSlice({
       .addMatcher(
         (action): action is PayloadAction<{ sceneId: string }> =>
           entitiesActions.paintCollision.match(action) ||
-          entitiesActions.paintColor.match(action),
+          entitiesActions.paintColor.match(action) ||
+          entitiesActions.paintSceneTile.match(action),
         (state, action) => {
           state.type = "scene";
           state.scene = action.payload.sceneId;
@@ -1230,6 +1463,26 @@ const editorSlice = createSlice({
           if (!state.sceneSelectionIds.includes(state.scene)) {
             state.sceneSelectionIds = [action.payload.sceneId];
           }
+        },
+      )
+      // On clear selection tiles from scene also remove selection
+      .addMatcher(
+        (action): action is PayloadAction<{ sceneId: string }> =>
+          entitiesActions.deleteSceneCollisionSelection.match(action) ||
+          entitiesActions.deleteSceneColorSelection.match(action) ||
+          entitiesActions.deleteSceneTileSelection.match(action),
+        (state, action) => {
+          if (state.scenePaintSelection?.sceneId === action.payload.sceneId) {
+            state.scenePaintSelection = undefined;
+          }
+        },
+      )
+      // On undo/redo clear paint selection
+      .addMatcher(
+        (action) =>
+          action.type === ActionTypes.UNDO || action.type === ActionTypes.REDO,
+        (state) => {
+          state.scenePaintSelection = undefined;
         },
       ),
 });
@@ -1254,7 +1507,7 @@ export const getZoomForSection = createSelector(
     if (section === "sprites") {
       return state.zoomSprite;
     }
-    if (section === "backgrounds") {
+    if (section === "images") {
       return state.zoomImage;
     }
     return 100;

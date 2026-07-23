@@ -39,8 +39,8 @@ import {
   VariableIcon,
 } from "ui/icons/Icons";
 import { MenuAccelerator, MenuDivider, MenuItem } from "ui/menu/Menu";
-import { ScriptEditorContext } from "components/script/ScriptEditorContext";
-import ScriptEventFormMathArea from "components/script/ScriptEventFormMatharea";
+import { ScriptEditorContext } from "components/script/context/ScriptEditorContext";
+import ScriptEventFormMathArea from "components/script/fields/ScriptEventFormMatharea";
 import {
   castEventToBool,
   castEventToFloat,
@@ -64,7 +64,7 @@ import { ClipboardTypeScriptValue } from "store/features/clipboard/clipboardType
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import clipboardActions from "store/features/clipboard/clipboardActions";
 import { copy, paste } from "store/features/clipboard/clipboardHelpers";
-import { constantSelectors } from "store/features/entities/entitiesState";
+import { constantSelectors } from "store/features/entities/entitiesSelectors";
 import { ConstantSelect } from "./ConstantSelect";
 import { SingleValue } from "react-select";
 import EngineFieldSelect from "components/forms/EngineFieldSelect";

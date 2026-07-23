@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add selection tool to collision and color painting modes, allowing a selection of tiles to be dragged or deleted
+- Add Tilemap scenes, allowing scenes to be built from tilesets and edited directly within the application
+- Add default collision, color, and priority properties for tilesets which are used when painting Tilemap scenes
+- Add autotile groups for tilesets, supporting 2x2 Wang tiles and 9-slice autotiles
+- Add ability to set tile palettes from right click context menu in sprite editor
+
+### Changed
+
+- Improve actor and trigger dragging so entities keep their grabbed offset instead of snapping position to the cursor
+- Pressing `s` while creating a scene now toggles between creating an Image Scene or Tilemap Scene
+- Updated Polish localisation. [@ReptiIe](https://github.com/ReptiIe)
+- Updated Japanese localisation. [@tomo666](https://github.com/tomo666)
+- Updated Ukrainian localisation. [@AmakerGame](https://github.com/AmakerGame)
+
+### Fixed
+
+- Fix issue where deprecated events could still be used if they had previously been favourited in an older version of the application
+- Fix issue where using spaces in ROM filename would cause build to fail on Windows
+- Fix issue where newly added event plugins wouldn't appear until project was reloaded
+- Fix issue where copy/paste of scenes could cause actor references to become disconnected
+- Fix issue where copy/paste of scenes would not transfer actor references used in prefab overrides
+- Fix issue where copy/paste of scenes would not transfer actor references used when calling scripts
+- Fix issue where copy/paste of scenes would not transfer actor references in properties used in values
+- Fix issue where creating a project from a template plugin included its thumbnail.png and plugin.json in the new project's root folder
+- Fix issue where projects created from a template plugin may not have their name and author values set correctly
+
+## [4.3.2] - 2026-06-22
+
+### Added
+
+- Add ability to view the current background and overlay tilemap in the debugger [@pau-tomas](https://github.com/pau-tomas)
+- Add ability to "Eject Web Template" from the Settings section, allowing packages created with "Export Web" to be customised
+- Add support for web template plugins
+
+# Changed
+
+- Updated Polish localisation. [@ReptiIe](https://github.com/ReptiIe)
+- Updated Japanese localisation. [@tomo666](https://github.com/tomo666)
+
+### Fixed
+
+- Fix issue preventing build log from opening automatically on warnings
+- Fix issue where script events could not be deleted after deleting a multi selection
+- Fix issue where deleting patterns in music editor during playback could cause application to freeze
+- Fix issue where select input menus would often not be wide enough to display contents without cropping text
+
+## [4.3.1] - 2026-06-11
+
+### Changed
+
+- Updated Simplified Chinese localisation [@wcxu21](https://github.com/wcxu21)
+
+### Fixed
+
+- Fix crash after deleting a file in the music editor
+- Fix error log seen in Javascript console of web export whenever link cable is initialised or data is transferred
+- Fix Y label in "Set Super GB Color Area" event [@pau-tomas](https://github.com/pau-tomas)
+
 ## [4.3.0] - 2026-06-08
 
 ### Added

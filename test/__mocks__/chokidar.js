@@ -1,9 +1,14 @@
 import EventEmitter from "events";
 
-const mockWatcher = new EventEmitter();
+const watch = jest.fn().mockImplementation(() => {
+  const watcher = new EventEmitter();
+  watcher.close = jest.fn();
+  return watcher;
+});
 
 const chokidar = {
-  watch: jest.fn().mockImplementation(() => mockWatcher),
+  watch,
 };
 
 export default chokidar;
+export { watch };

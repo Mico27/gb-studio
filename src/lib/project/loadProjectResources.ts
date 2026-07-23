@@ -19,24 +19,20 @@ import {
   SettingsResource,
   SoundResource,
   SpriteResource,
-  TilesetResource,
+  CompressedTilesetResource,
   TriggerPrefabResource,
   TriggerResource,
   VariablesResource,
 } from "shared/lib/resources/types";
-import glob from "glob";
-import { promisify } from "util";
+import { glob } from "lib/helpers/glob";
 import promiseLimit from "lib/helpers/promiseLimit";
 import groupBy from "lodash/groupBy";
 import identity from "lodash/identity";
 import { defaultProjectSettings } from "consts";
 import { readJson } from "lib/helpers/fs/readJson";
 import { Value } from "@sinclair/typebox/value";
-import { TSchema } from "@sinclair/typebox/build/cjs/type/schema";
-import { Static } from "@sinclair/typebox";
+import type { Static, TSchema } from "@sinclair/typebox";
 import { naturalSortPaths, pathToPosix } from "shared/lib/helpers/path";
-
-const globAsync = promisify(glob);
 
 const CONCURRENT_RESOURCE_LOAD_COUNT = 8;
 
@@ -76,7 +72,7 @@ interface ResourceLookup {
   music: ResourceWithPath<MusicResource>[];
   emotes: ResourceWithPath<EmoteResource>[];
   avatars: ResourceWithPath<AvatarResource>[];
-  tilesets: ResourceWithPath<TilesetResource>[];
+  tilesets: ResourceWithPath<CompressedTilesetResource>[];
   fonts: ResourceWithPath<FontResource>[];
   sounds: ResourceWithPath<SoundResource>[];
   variables: ResourceWithPath<VariablesResource>[];
@@ -90,9 +86,10 @@ export const loadProjectResources = async (
   metadataResource: ProjectMetadataResource,
 ): Promise<CompressedProjectResources> => {
   const projectResources = naturalSortPaths(
-    await globAsync(
-      path.join(projectRoot, "{project,assets,plugins}", "**/*.gbsres"),
-    ),
+    await glob("{project,assets,plugins}/**/*.gbsres", {
+      cwd: projectRoot,
+      absolute: true,
+    }),
   );
 
   const resources = (
@@ -105,7 +102,7 @@ export const loadProjectResources = async (
             path: pathToPosix(path.relative(projectRoot, projectResourcePath)),
             data: resourceData,
           };
-        } catch (e) {
+        } catch {
           console.error("Failed to load resource: " + projectResourcePath);
           return undefined;
         }
@@ -188,7 +185,7 @@ export const loadProjectResources = async (
     cast(MusicResource, resourcesLookup.music),
     cast(EmoteResource, resourcesLookup.emotes),
     cast(AvatarResource, resourcesLookup.avatars),
-    cast(TilesetResource, resourcesLookup.tilesets),
+    cast(CompressedTilesetResource, resourcesLookup.tilesets),
     cast(FontResource, resourcesLookup.fonts),
     cast(SoundResource, resourcesLookup.sounds),
     cast(VariablesResource, resourcesLookup.variables),

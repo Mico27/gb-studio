@@ -6,13 +6,14 @@ import React, {
   useState,
 } from "react";
 import throttle from "lodash/throttle";
-import SceneView from "./SceneView";
+import SceneView from "./entities/scenes/SceneView";
 import WorldHelp from "./WorldHelp";
-import Connections from "./Connections";
+import Connections from "./connections/Connections";
 import {
   MIDDLE_MOUSE,
   TOOL_COLORS,
   TOOL_COLLISIONS,
+  TOOL_TILES,
   TOOL_ERASER,
   TILE_SIZE,
   TOOL_SELECT,
@@ -24,7 +25,7 @@ import {
   getMaxWorldRight,
   getMaxWorldBottom,
   noteSelectors,
-} from "store/features/entities/entitiesState";
+} from "store/features/entities/entitiesSelectors";
 import editorActions from "store/features/editor/editorActions";
 import clipboardActions from "store/features/clipboard/clipboardActions";
 import entitiesActions from "store/features/entities/entitiesActions";
@@ -38,9 +39,14 @@ import {
 } from "store/hooks";
 import { Selection } from "ui/document/Selection";
 import useResizeObserver from "ui/hooks/use-resize-observer";
-import NoteView from "components/world/NoteView";
-import renderWorldContextMenu from "components/world/renderWorldContextMenu";
+import NoteView from "components/world/entities/notes/NoteView";
+import renderWorldContextMenu from "components/world/contextMenus/renderWorldContextMenu";
 import { useContextMenu } from "ui/hooks/use-context-menu";
+import WorldCursor from "components/world/WorldCursor";
+import { BackgroundIcon, JigsawIcon } from "ui/icons/Icons";
+import l10n from "shared/lib/lang/l10n";
+import PlayerStartMarker from "components/world/connections/PlayerStartMarker";
+import { useSelectAllShortcut } from "ui/hooks/use-select-all";
 
 const MOUSE_ZOOM_SPEED = 0.5;
 
@@ -68,10 +74,24 @@ const NewSceneCursor = styled.div`
   position: absolute;
   cursor: pointer;
   background-color: rgba(3, 54, 99, 0.5);
+  color: ${(props) => props.theme.colors.text};
   width: 160px;
   height: 144px;
   border-radius: 4px;
   z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: copy;
+
+  svg {
+    width: 64px;
+    height: 64px;
+    fill: ${(props) => props.theme.colors.text};
+  }
 `;
 
 type Point = {
@@ -136,6 +156,8 @@ const WorldEntities = React.memo(
             editable={editable}
           />
         )}
+
+        <PlayerStartMarker editable={editable} />
       </>
     );
   },
@@ -153,6 +175,9 @@ const WorldInteractionOverlay = React.memo(
   ({ tool, scrollRef, zoomRatio }: WorldInteractionOverlayProps) => {
     const dispatch = useAppDispatch();
     const store = useAppStore();
+
+    const sceneAddType = useAppSelector((state) => state.editor.sceneAddType);
+    const pasteMode = useAppSelector((state) => state.editor.pasteMode);
 
     const [hoverState, setHoverState] = useState<Point>();
     const [selectionStart, setSelectionStart] = useState<Point>();
@@ -179,6 +204,7 @@ const WorldInteractionOverlay = React.memo(
         const clipboardVariables = state.editor.clipboardVariables;
         const defaultSceneTypeId =
           state.project.present.settings.defaultSceneTypeId;
+        const sceneAddType = state.editor.sceneAddType;
 
         if (pasteMode) {
           dispatch(clipboardActions.pasteSceneAt(point));
@@ -187,6 +213,7 @@ const WorldInteractionOverlay = React.memo(
             entitiesActions.addScene({
               ...point,
               variables: clipboardVariables,
+              tilemap: sceneAddType === "tilemap",
               defaults: {
                 type: defaultSceneTypeId,
               },
@@ -399,7 +426,20 @@ const WorldInteractionOverlay = React.memo(
               top: hoverState.y,
               pointerEvents: "auto",
             }}
-          />
+          >
+            {!pasteMode &&
+              (sceneAddType === "image" ? (
+                <>
+                  <BackgroundIcon />
+                  {l10n("FIELD_IMAGE_SCENE")}
+                </>
+              ) : (
+                <>
+                  <JigsawIcon />
+                  {l10n("FIELD_TILEMAP_SCENE")}
+                </>
+              ))}
+          </NewSceneCursor>
         )}
 
         {tool === TOOL_NOTE && hoverState && (
@@ -447,6 +487,7 @@ const WorldView = () => {
       state.editor.showLayers ||
       (state.editor.tool !== TOOL_COLORS &&
         state.editor.tool !== TOOL_COLLISIONS &&
+        state.editor.tool !== TOOL_TILES &&
         state.editor.tool !== TOOL_ERASER),
   );
   const focusSceneId = useAppSelector((state) => state.editor.focusSceneId);
@@ -462,6 +503,9 @@ const WorldView = () => {
 
   const selectedIds = useAppSelector((state) => state.editor.sceneSelectionIds);
   const tool = useAppSelector((state) => state.editor.tool);
+  const scenePaintSelection = useAppSelector(
+    (state) => state.editor.scenePaintSelection,
+  );
 
   const [scrollRef, scrollContainerSize] = useResizeObserver<HTMLDivElement>();
 
@@ -539,9 +583,47 @@ const WorldView = () => {
         return;
       }
       e.preventDefault();
+      if (scenePaintSelection) {
+        dispatch(clipboardActions.copySceneGridSelection());
+        return;
+      }
       dispatch(clipboardActions.copySelectedEntity());
     },
-    [dispatch],
+    [dispatch, scenePaintSelection],
+  );
+
+  const onCut = useCallback(
+    (e: ClipboardEvent) => {
+      if (!(e.target instanceof HTMLElement) || e.target.nodeName !== "BODY")
+        return;
+      if (!scenePaintSelection) return;
+      e.preventDefault();
+      dispatch(clipboardActions.copySceneGridSelection());
+      if (scenePaintSelection.mode === "tiles" && scenePaintSelection.layerId) {
+        dispatch(
+          entitiesActions.deleteSceneTileSelection({
+            sceneId: scenePaintSelection.sceneId,
+            layerId: scenePaintSelection.layerId,
+            selection: scenePaintSelection.selection,
+          }),
+        );
+      } else if (scenePaintSelection.mode === "colors") {
+        dispatch(
+          entitiesActions.deleteSceneColorSelection({
+            sceneId: scenePaintSelection.sceneId,
+            selection: scenePaintSelection.selection,
+          }),
+        );
+      } else if (scenePaintSelection.mode === "collisions") {
+        dispatch(
+          entitiesActions.deleteSceneCollisionSelection({
+            sceneId: scenePaintSelection.sceneId,
+            selection: scenePaintSelection.selection,
+          }),
+        );
+      }
+    },
+    [dispatch, scenePaintSelection],
   );
 
   const onPaste = useCallback(
@@ -552,30 +634,43 @@ const WorldView = () => {
       }
       e.preventDefault();
       try {
+        const state = store.getState();
+        const hover = state.editor.hover;
+        if (hover.sceneId) {
+          dispatch(
+            clipboardActions.pasteSceneGridSelectionAt({
+              sceneId: hover.sceneId,
+              layerId: state.editor.selectedTilemapLayerId,
+              x: hover.x,
+              y: hover.y,
+            }),
+          );
+        }
         dispatch(clipboardActions.pasteClipboardEntity());
-      } catch (err) {
+      } catch {
         // Clipboard isn't pastable, just ignore it
       }
     },
-    [dispatch],
+    [dispatch, store],
   );
 
   //#endregion Clipboard handling
 
   //#region Keyboard handling
 
-  const onSelectAllWorldEntities = useCallback(() => {
+  const onSelectAll = useCallback(() => {
     dispatch(editorActions.setSceneSelectionIds([...sceneIds, ...noteIds]));
   }, [dispatch, sceneIds, noteIds]);
+
+  useSelectAllShortcut({
+    onSelectAll,
+  });
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!(e.target instanceof HTMLElement)) return;
       if (e.target.nodeName !== "BODY") {
         return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.code === "KeyA") {
-        return onSelectAllWorldEntities();
       }
       if (e.ctrlKey || e.metaKey) {
         return;
@@ -585,10 +680,42 @@ const WorldView = () => {
         e.preventDefault();
       }
       if (focus && (e.key === "Backspace" || e.key === "Delete")) {
+        if (scenePaintSelection) {
+          e.preventDefault();
+
+          if (scenePaintSelection.mode === "tiles") {
+            if (!scenePaintSelection.layerId) {
+              return;
+            }
+            dispatch(
+              entitiesActions.deleteSceneTileSelection({
+                sceneId: scenePaintSelection.sceneId,
+                layerId: scenePaintSelection.layerId,
+                selection: scenePaintSelection.selection,
+              }),
+            );
+          } else if (scenePaintSelection.mode === "colors") {
+            dispatch(
+              entitiesActions.deleteSceneColorSelection({
+                sceneId: scenePaintSelection.sceneId,
+                selection: scenePaintSelection.selection,
+              }),
+            );
+          } else {
+            dispatch(
+              entitiesActions.deleteSceneCollisionSelection({
+                sceneId: scenePaintSelection.sceneId,
+                selection: scenePaintSelection.selection,
+              }),
+            );
+          }
+          return;
+        }
+
         dispatch(entitiesActions.removeSelectedEntity());
       }
     },
-    [dispatch, focus, onSelectAllWorldEntities],
+    [dispatch, focus, scenePaintSelection],
   );
 
   const onKeyUp = useCallback(
@@ -876,6 +1003,7 @@ const WorldView = () => {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("copy", onCopy);
+    window.addEventListener("cut", onCut);
     window.addEventListener("paste", onPaste);
     window.addEventListener("resize", onWindowResize);
     window.addEventListener("blur", onWindowBlur);
@@ -884,6 +1012,7 @@ const WorldView = () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("copy", onCopy);
+      window.removeEventListener("cut", onCut);
       window.removeEventListener("paste", onPaste);
       window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("blur", onWindowBlur);
@@ -892,6 +1021,7 @@ const WorldView = () => {
     };
   }, [
     onCopy,
+    onCut,
     onEndWorldDrag,
     onKeyDown,
     onKeyUp,
@@ -955,6 +1085,11 @@ const WorldView = () => {
           zoomRatio={zoomRatio}
           showConnections={showConnections}
           editable={!dragMode}
+        />
+        <WorldCursor
+          editable={!dragMode}
+          scrollRef={scrollRef}
+          zoomRatio={zoomRatio}
         />
         <WorldInteractionOverlay
           tool={tool}

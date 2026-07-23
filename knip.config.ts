@@ -1,9 +1,8 @@
 import { KnipConfig } from "knip";
-import mdx from "knip/dist/compilers/mdx";
 
 const config: KnipConfig = {
   compilers: {
-    mdx: mdx.compiler,
+    mdx: true,
   },
   entry: [
     "src/apps/gb-studio/main.{js,ts}",
@@ -28,14 +27,11 @@ const config: KnipConfig = {
     "@electron-forge/maker-.*",
     "@electron-forge/plugin-.*",
     "@types/webpack-env",
-    "babel-eslint",
     "eslint-plugin-react",
-    "jest-environment-jsdom",
     "eslint-plugin-jsx-a11y",
     "eslint-plugin-import",
-    "webpack",
   ],
-  ignoreBinaries: ["webpack", "time", "flamebearer"],
+  ignoreBinaries: ["webpack", "flamebearer"],
   ignoreUnresolved: ["../helpers/l10n"],
 };
 

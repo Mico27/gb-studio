@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Option,
   Select,
@@ -12,7 +12,7 @@ import { PlayIcon } from "ui/icons/Icons";
 import { Button } from "ui/buttons/Button";
 import soundfxActions from "store/features/soundfx/soundfxActions";
 import l10n from "shared/lib/lang/l10n";
-import { soundSelectors } from "store/features/entities/entitiesState";
+import { soundSelectors } from "store/features/entities/entitiesSelectors";
 import uniq from "lodash/uniq";
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import { SingleValue } from "react-select";
@@ -85,7 +85,7 @@ const PlaySoundEffect = ({
   );
 };
 
-export const SoundEffectSelect = ({
+const SoundEffectSelectComponent = ({
   value,
   onChange,
   pitch,
@@ -95,7 +95,6 @@ export const SoundEffectSelect = ({
   allowNone,
   ...selectProps
 }: SoundEffectSelectProps) => {
-  const [currentValue, setCurrentValue] = useState<Option>();
   const [options, setOptions] = useState<OptGroup[]>([]);
 
   const sounds = useAppSelector((state) => soundSelectors.selectAll(state));
@@ -142,18 +141,13 @@ export const SoundEffectSelect = ({
     );
   }, [allowNone, sounds]);
 
-  useEffect(() => {
-    let option: Option | null = null;
-    options.find((optGroup) => {
-      const foundOption = optGroup.options.find((opt) => opt.value === value);
-      if (foundOption) {
-        option = foundOption;
-        return true;
-      }
-      return false;
-    });
-    setCurrentValue(option || options[0]?.options[0]);
-  }, [options, value]);
+  const currentValue = useMemo(
+    () =>
+      options
+        .flatMap((group) => group.options)
+        .find((option) => option.value === value) || options[0]?.options[0],
+    [options, value],
+  );
 
   const onSelectChange = useCallback(
     (newValue: SingleValue<Option>) => {
@@ -207,3 +201,7 @@ export const SoundEffectSelect = ({
     />
   );
 };
+
+export const SoundEffectSelect = memo<SoundEffectSelectProps>(
+  SoundEffectSelectComponent,
+);

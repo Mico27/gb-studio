@@ -11,11 +11,17 @@ const APIMock = {
     onChange: () => {},
   },
   project: {
+    ejectWebTemplate: () => Promise.resolve(undefined),
     getBackgroundInfo: () =>
       Promise.resolve({
         numTiles: 1,
         warnings: [],
         lookup: [],
+      }),
+    getSceneTilemapInfo: () =>
+      Promise.resolve({
+        numTiles: 1,
+        warnings: [],
       }),
   },
 

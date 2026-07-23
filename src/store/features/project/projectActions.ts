@@ -25,17 +25,14 @@ export type ProjectData = ProjectEntitiesData & {
   settings: SettingsState;
 };
 
-const saveSteps = [
-  "saving",
-  "normalizing",
-  "compressing",
-  "checksums",
-  "patching",
-  "writing",
-  "complete",
-] as const;
-
-export type SaveStep = (typeof saveSteps)[number];
+export type SaveStep =
+  | "saving"
+  | "normalizing"
+  | "compressing"
+  | "checksums"
+  | "patching"
+  | "writing"
+  | "complete";
 
 export const denormalizeProject = (project: {
   entities: EntitiesState;
@@ -85,8 +82,6 @@ const reloadAssets = createAction("project/reloadAssets");
 /**************************************************************************
  * Asset Files
  */
-
-const addFileToProject = createAction<string>("project/addFile");
 
 const removeAsset = createAsyncThunk<
   {
@@ -234,7 +229,6 @@ const projectActions = {
   closeProject,
   loadProject,
   loadUI,
-  addFileToProject,
   reloadAssets,
   saveProject,
   setSaveStep,
