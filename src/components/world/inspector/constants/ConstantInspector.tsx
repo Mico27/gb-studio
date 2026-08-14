@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   actorPrefabSelectors,
   actorSelectors,
@@ -28,10 +34,7 @@ import styled from "styled-components";
 import { SplitPaneHeader } from "ui/splitpane/SplitPaneHeader";
 import { SymbolEditorWrapper } from "components/forms/symbols/SymbolEditorWrapper";
 import { ConstantReference } from "components/forms/ReferencesSelect";
-import type {
-  ConstantUse,
-  ConstantUseResult,
-} from "components/world/inspector/constants/ConstantUses.worker";
+import type { ConstantUse } from "renderer/lib/workers/ConstantUses.worker";
 import l10n, { getL10NData } from "shared/lib/lang/l10n";
 import { selectScriptEventDefs } from "store/features/scriptEventDefs/scriptEventDefsState";
 import { useAppDispatch, useAppSelector } from "store/hooks";
@@ -46,10 +49,8 @@ import {
 } from "shared/lib/helpers/8bit";
 import { WorldInspector } from "components/world/inspector/WorldInspector";
 import useWindowSize from "ui/hooks/use-window-size";
-
-export const worker = new Worker(
-  new URL("./ConstantUses.worker.ts", import.meta.url),
-);
+import { findConstantUses } from "renderer/lib/workers/constantUses";
+import { isWorkerRequestAbortError } from "renderer/lib/workers/createWorkerClient";
 
 interface ConstantInspectorProps {
   id: string;
@@ -91,6 +92,13 @@ export const ConstantInspector = ({ id }: ConstantInspectorProps) => {
     ? engineConstantsLookup?.[engineConstantName]
     : undefined;
   const [name, setName] = useState(constant?.name ?? engineConstantName);
+  const pendingRenameRef = useRef<
+    | {
+        constantId: string;
+        name: string;
+      }
+    | undefined
+  >(undefined);
   const [constantUses, setConstantUses] = useState<ConstantUse[]>([]);
   const scenes = useAppSelector((state) => sceneSelectors.selectAll(state));
   const actorsLookup = useAppSelector((state) =>
@@ -119,15 +127,33 @@ export const ConstantInspector = ({ id }: ConstantInspectorProps) => {
 
   const dispatch = useAppDispatch();
 
-  const onWorkerComplete = useCallback(
-    (e: MessageEvent<ConstantUseResult>) => {
-      if (e.data.id === id) {
-        setFetching(false);
-        setConstantUses(e.data.uses);
+  const commitPendingRename = useCallback(
+    (constantId: string, updateLocalName = false) => {
+      const pendingRename = pendingRenameRef.current;
+      if (!pendingRename || pendingRename.constantId !== constantId) {
+        return;
       }
+
+      pendingRenameRef.current = undefined;
+      const validName = pendingRename.name
+        .toLocaleUpperCase()
+        .replace(/\s/g, "_");
+      if (updateLocalName) {
+        setName(validName);
+      }
+      dispatch(
+        entitiesActions.renameConstant({
+          constantId,
+          name: validName,
+        }),
+      );
     },
-    [id],
+    [dispatch],
   );
+
+  useEffect(() => {
+    return () => commitPendingRename(id);
+  }, [commitPendingRename, id]);
 
   const usesHeight = useMemo(() => {
     const top = entry?.target.getBoundingClientRect().top;
@@ -138,33 +164,42 @@ export const ConstantInspector = ({ id }: ConstantInspectorProps) => {
   }, [entry?.target, winHeight]);
 
   useEffect(() => {
-    worker.addEventListener("message", onWorkerComplete);
-    return () => {
-      worker.removeEventListener("message", onWorkerComplete);
-    };
-  }, [onWorkerComplete]);
-
-  useEffect(() => {
     if (constant) {
       setName(constant.name);
     }
   }, [constant]);
 
   useEffect(() => {
-    setFetching(true);
-    worker.postMessage({
-      id,
-      constantId: id,
-      scenes,
-      actorsLookup,
-      triggersLookup,
-      actorPrefabsLookup,
-      triggerPrefabsLookup,
-      scriptEventsLookup,
-      scriptEventDefs,
-      customEventsLookup,
-      l10NData: getL10NData(),
-    });
+    const abortController = new AbortController();
+    const loadUses = async () => {
+      setFetching(true);
+      try {
+        const uses = await findConstantUses(
+          {
+            constantId: id,
+            scenes,
+            actorsLookup,
+            triggersLookup,
+            actorPrefabsLookup,
+            triggerPrefabsLookup,
+            scriptEventsLookup,
+            scriptEventDefs,
+            customEventsLookup,
+            l10NData: getL10NData(),
+          },
+          { signal: abortController.signal },
+        );
+        setConstantUses(uses);
+        setFetching(false);
+      } catch (error) {
+        if (!isWorkerRequestAbortError(error)) {
+          console.error(error);
+          setFetching(false);
+        }
+      }
+    };
+    void loadUses();
+    return () => abortController.abort();
   }, [
     scenes,
     actorsLookup,
@@ -180,17 +215,14 @@ export const ConstantInspector = ({ id }: ConstantInspectorProps) => {
   const onRename = (e: React.ChangeEvent<HTMLInputElement>) => {
     const editValue = e.currentTarget.value;
     setName(editValue);
+    pendingRenameRef.current = {
+      constantId: id,
+      name: editValue,
+    };
   };
 
   const onRenameFinished = () => {
-    const validName = name.toLocaleUpperCase().replace(/\s/g, "_");
-    setName(validName);
-    dispatch(
-      entitiesActions.renameConstant({
-        constantId: id,
-        name: validName,
-      }),
-    );
+    commitPendingRename(id, true);
   };
 
   const onChangeValue = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,7 +266,7 @@ export const ConstantInspector = ({ id }: ConstantInspectorProps) => {
     if (!constant) {
       return;
     }
-    dispatch(entitiesActions.removeConstant({ constantId: constant.id }));
+    dispatch(entitiesActions.confirmRemoveConstant(constant.id));
   }, [dispatch, constant]);
 
   if (!constant && !isEngineConstant) {

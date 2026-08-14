@@ -1,13 +1,6 @@
 {
   "goldTier": [
     {
-      "id": "483773",
-      "type": "user",
-      "attributes": {
-        "full_name": "BMo"
-      }
-    },
-    {
       "id": "111731287",
       "type": "user",
       "attributes": {
@@ -137,6 +130,13 @@
     }
   ],
   "pastPatrons": [
+    {
+      "id": "483773",
+      "type": "user",
+      "attributes": {
+        "full_name": "BMo"
+      }
+    },
     {
       "id": "852350",
       "type": "user",

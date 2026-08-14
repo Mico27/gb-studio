@@ -204,7 +204,7 @@ export const ConstantNavigatorPane = ({
         <MenuItem
           key="delete"
           onClick={() =>
-            dispatch(entitiesActions.removeConstant({ constantId: item.id }))
+            dispatch(entitiesActions.confirmRemoveConstant(item.id))
           }
         >
           {l10n("MENU_DELETE_CONSTANT")}
@@ -276,9 +276,9 @@ export const ConstantNavigatorPane = ({
       onKeyDown={(e: KeyboardEvent, item) => {
         listenForRenameStart(e);
         if (item?.type === "folder") {
-          if (e.key === "ArrowRight") {
+          if (e.key === "ArrowRight" && !isFolderOpen(item.id)) {
             toggleFolderOpen(item.id);
-          } else if (e.key === "ArrowLeft") {
+          } else if (e.key === "ArrowLeft" && isFolderOpen(item.id)) {
             toggleFolderOpen(item.id);
           }
         }

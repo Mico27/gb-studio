@@ -424,7 +424,7 @@ export type Scene = Omit<
 export const ScriptVariable = Type.Object({
   id: Type.String(),
   name: Type.String(),
-  passByReference: Type.Boolean(),
+  passByReference: Type.Union([Type.Boolean(), Type.Literal("array")]),
 });
 
 export type ScriptVariable = Static<typeof ScriptVariable>;
@@ -801,13 +801,6 @@ export type ShowSceneScreenGridSetting = Static<
   typeof ShowSceneScreenGridSetting
 >;
 
-export const MusicDriverSetting = Type.Union([
-  Type.Literal("huge"),
-  Type.Literal("gbt"),
-]);
-
-export type MusicDriverSetting = Static<typeof MusicDriverSetting>;
-
 export const CartType = Type.Union([
   Type.Literal("mbc5"),
   Type.Literal("mbc3"),
@@ -943,7 +936,6 @@ export const SettingsResource = Type.Object({
   defaultFontId: Type.String(),
   defaultCharacterEncoding: Type.String(),
   defaultPlayerSprites: Type.Record(Type.String(), Type.String()),
-  musicDriver: MusicDriverSetting,
   cartType: CartType,
   batterylessEnabled: Type.Boolean(),
   favoriteEvents: Type.Array(Type.String()),
@@ -994,12 +986,31 @@ export type SettingsResource = Static<typeof SettingsResource>;
 
 export type Settings = ExtractResource<SettingsResource>;
 
-export const Variable = Type.Object({
+export const VariableType = Type.Union([
+  Type.Literal("number"),
+  Type.Literal("array"),
+]);
+
+export type VariableType = Static<typeof VariableType>;
+
+const VariableBase = {
   id: Type.String(),
   name: Type.String(),
   symbol: Type.String(),
   flags: Type.Optional(Type.Record(Type.String(), Type.String())),
-});
+};
+
+export const Variable = Type.Union([
+  Type.Object({
+    ...VariableBase,
+    type: Type.Literal("number"),
+  }),
+  Type.Object({
+    ...VariableBase,
+    type: Type.Literal("array"),
+    size: Type.Integer({ minimum: 1 }),
+  }),
+]);
 
 export type Variable = Static<typeof Variable>;
 

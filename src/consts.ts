@@ -187,6 +187,8 @@ export const MIN_OCTAVE = 3;
 export const MAX_OCTAVE = 8;
 export const NOTE_C5 = OCTAVE_SIZE * 2;
 
+export const SYSTEM_DEFAULT_APP = "system-default";
+
 // Errors
 export const ERR_PROJECT_EXISTS = "ERR_PROJECT_EXISTS";
 
@@ -307,7 +309,6 @@ export const defaultProjectSettings: Settings = {
   defaultFontId: "",
   defaultCharacterEncoding: "",
   defaultPlayerSprites: {},
-  musicDriver: "gbt",
   cartType: "mbc5",
   batterylessEnabled: false,
   favoriteEvents: ["EVENT_TEXT", "EVENT_SWITCH_SCENE"],

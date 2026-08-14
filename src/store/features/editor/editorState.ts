@@ -117,6 +117,8 @@ export interface SlopePreview {
 
 export type SceneGridSelectionMode = "tiles" | "collisions" | "colors";
 
+export type PaletteEditorTab = "rgb" | "hsb" | "hex";
+
 export interface ScenePaintSelection {
   sceneId: string;
   layerId?: string;
@@ -172,6 +174,7 @@ export interface EditorState {
   worldViewWidth: number;
   worldViewHeight: number;
   selectedPalette: number;
+  paletteEditorTab: PaletteEditorTab;
   selectedTileType: number;
   selectedTileMask: number;
   selectedSceneTile?: SelectedSceneTile;
@@ -252,6 +255,7 @@ export const initialState: EditorState = {
   worldViewWidth: 0,
   worldViewHeight: 0,
   selectedPalette: 0,
+  paletteEditorTab: "rgb",
   selectedTileType: COLLISION_ALL,
   selectedTileMask: 0xff,
   selectedSceneTile: undefined,
@@ -479,6 +483,10 @@ const editorSlice = createSlice({
       if (state.selectedBrush === BRUSH_SELECTION) {
         state.selectedBrush = BRUSH_8PX;
       }
+    },
+
+    setPaletteEditorTab: (state, action: PayloadAction<PaletteEditorTab>) => {
+      state.paletteEditorTab = action.payload;
     },
 
     setSelectedTileType: (
@@ -1322,11 +1330,6 @@ const editorSlice = createSlice({
           state.scene = "";
           state.entityId = action.payload.triggerPrefabId;
         }
-      })
-      .addCase(entitiesActions.addConstant, (state, action) => {
-        state.type = "constant";
-        state.scene = "";
-        state.entityId = action.payload.constantId;
       })
       .addCase(entitiesActions.moveActor, (state, action) => {
         if (state.scene !== action.payload.newSceneId) {

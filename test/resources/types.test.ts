@@ -613,7 +613,6 @@ describe("TypeBox Schemas", () => {
       defaultFontId: "font1",
       defaultCharacterEncoding: "utf-8",
       defaultPlayerSprites: { player1: "sprite1" },
-      musicDriver: "huge",
       cartType: "mbc5",
       batterylessEnabled: false,
       favoriteEvents: [],
@@ -703,7 +702,6 @@ describe("TypeBox Schemas", () => {
       defaultFontId: "font1",
       defaultCharacterEncoding: "utf-8",
       defaultPlayerSprites: { player1: "sprite1" },
-      musicDriver: "huge",
       cartType: "mbc5",
       batterylessEnabled: false,
       favoriteEvents: [],
@@ -738,17 +736,49 @@ describe("TypeBox Schemas", () => {
   });
 
   it("should validate VariableData", () => {
-    const validVariable = { id: "var1", name: "Variable 1", symbol: "symbol" };
-    const invalidVariable = { id: "var1", name: "Variable 1" };
+    const validNumberVariable = {
+      id: "var1",
+      name: "Variable 1",
+      symbol: "symbol",
+      type: "number",
+    };
+    const validArrayVariable = {
+      id: "var2",
+      name: "Variable 2",
+      symbol: "symbol_2",
+      type: "array",
+      size: 4,
+    };
+    const missingType = { id: "var1", name: "Variable 1", symbol: "symbol" };
+    const arrayWithoutSize = {
+      id: "var2",
+      name: "Variable 2",
+      symbol: "symbol_2",
+      type: "array",
+    };
+    const emptyArray = {
+      ...validArrayVariable,
+      size: 0,
+    };
 
-    expect(() => Value.Decode(Variable, validVariable)).not.toThrow();
-    expect(() => Value.Decode(Variable, invalidVariable)).toThrow();
+    expect(() => Value.Decode(Variable, validNumberVariable)).not.toThrow();
+    expect(() => Value.Decode(Variable, validArrayVariable)).not.toThrow();
+    expect(() => Value.Decode(Variable, missingType)).toThrow();
+    expect(() => Value.Decode(Variable, arrayWithoutSize)).toThrow();
+    expect(() => Value.Decode(Variable, emptyArray)).toThrow();
   });
 
   it("should validate VariablesResource", () => {
     const validVariables = {
       _resourceType: "variables",
-      variables: [{ id: "var1", name: "Variable 1", symbol: "symbol" }],
+      variables: [
+        {
+          id: "var1",
+          name: "Variable 1",
+          symbol: "symbol",
+          type: "number",
+        },
+      ],
       constants: [],
     };
     const invalidVariables = {
@@ -806,5 +836,25 @@ describe("TypeBox Schemas", () => {
 
     expect(isProjectMetadataResource(validMetadata)).toBe(true);
     expect(isProjectMetadataResource(invalidMetadata)).toBe(false);
+  });
+
+  it("should keep Variable flags and default to number type when migrating to discriminated union format", () => {
+    const data = {
+      id: "myvar_id",
+      name: "My Var",
+      symbol: "var_myvar",
+      flags: {
+        flag1: "ABC",
+        flag2: "DEF",
+        flag15: "FOO",
+        flag16: "BAR",
+      },
+    };
+    const castData = Value.Cast(Variable, data);
+    expect(castData.id).toEqual(data.id);
+    expect(castData.symbol).toEqual(data.symbol);
+    expect(castData.flags).toEqual(data.flags);
+    expect(castData.type).toEqual("number");
+    expect("size" in castData).toBeFalse();
   });
 });

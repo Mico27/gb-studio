@@ -41,33 +41,37 @@ export const StyledTabBar = styled.div<StyledTabBarProps>`
   ${(props) =>
     props.$variant === "eventSection"
       ? css`
-          height: 25px;
-          max-width: none;
-          margin-left: -5px;
-          margin-right: -5px;
-          padding: 0px;
-          margin-top: -5px;
-          margin-bottom: 5px;
-          flex-basis: 100%;
-          width: 100%;
-          background: ${(props) =>
-            props.theme.colors.scripting.tabs.background};
+          && {
+            height: 25px;
+            max-width: none;
+            margin-left: -5px;
+            margin-right: -5px;
+            padding: 0px;
+            margin-top: -5px;
+            margin-bottom: 5px;
+            flex-basis: 100%;
+            width: 100%;
+            background: ${(props) =>
+              props.theme.colors.scripting.tabs.background};
+          }
         `
       : ""}
 
   ${(props) =>
     props.$variant === "scriptEvent"
       ? css`
-          border: 0;
-          border-bottom: 0;
-          margin-bottom: -5px;
-          margin-left: 5px;
-          margin-top: 5px;
-          height: 25px;
-          flex-basis: 100%;
-          padding-left: 12px;
-          background: ${(props) =>
-            props.theme.colors.scripting.form.background};
+          && {
+            border: 0;
+            border-bottom: 0;
+            margin-bottom: -5px;
+            margin-left: 5px;
+            margin-top: 5px;
+            height: 25px;
+            flex-basis: 100%;
+            padding-left: 12px;
+            background: ${(props) =>
+              props.theme.colors.scripting.form.background};
+          }
         `
       : ""}
 

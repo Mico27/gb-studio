@@ -343,7 +343,6 @@ export const dummyProjectData: ProjectData = {
     defaultFontId: "",
     defaultCharacterEncoding: "",
     defaultPlayerSprites: {},
-    musicDriver: "huge",
     cartType: "mbc5",
     batterylessEnabled: false,
     favoriteEvents: [],
@@ -657,7 +656,6 @@ export const dummySettingsResource: SettingsResource = {
   defaultFontId: "font1",
   defaultCharacterEncoding: "utf-8",
   defaultPlayerSprites: { player1: "sprite1" },
-  musicDriver: "huge",
   cartType: "mbc5",
   batterylessEnabled: false,
   favoriteEvents: [],
@@ -703,7 +701,9 @@ export const dummySettingsResource: SettingsResource = {
 
 export const dummyVariablesResource: VariablesResource = {
   _resourceType: "variables",
-  variables: [{ id: "var1", name: "Variable 1", symbol: "symbol" }],
+  variables: [
+    { id: "var1", name: "Variable 1", symbol: "symbol", type: "number" },
+  ],
   constants: [],
 };
 
@@ -711,6 +711,7 @@ export const dummyVariable: Variable = {
   id: "var1",
   name: "Variable 1",
   symbol: "symbol",
+  type: "number",
 };
 
 export const dummyEngineFieldValuesResource: EngineFieldValuesResource = {
@@ -800,7 +801,6 @@ export const dummyProjectResources: ProjectResources = {
     defaultFontId: "",
     defaultCharacterEncoding: "",
     defaultPlayerSprites: {},
-    musicDriver: "huge",
     cartType: "mbc5",
     batterylessEnabled: false,
     favoriteEvents: [],

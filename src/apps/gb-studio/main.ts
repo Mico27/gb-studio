@@ -63,6 +63,7 @@ import {
   EMULATOR_MUTED_SETTING_KEY,
   LOCALE_SETTING_KEY,
   musicTemplatesRoot,
+  SYSTEM_DEFAULT_APP,
   THEME_SETTING_KEY,
 } from "consts";
 import { getBackgroundInfo, getSceneTilemapInfo } from "lib/helpers/validation";
@@ -142,6 +143,7 @@ import { msToHumanTime } from "shared/lib/helpers/time";
 import confirmDeletePreset from "lib/electron/dialog/confirmDeletePreset";
 import confirmApplyPreset from "lib/electron/dialog/confirmApplyPreset";
 import confirmDeleteConstant from "lib/electron/dialog/confirmDeleteConstant";
+import confirmDeleteVariable from "lib/electron/dialog/confirmDeleteVariable";
 import {
   addPluginToProject,
   addUserRepo,
@@ -185,6 +187,8 @@ import confirmConvertModReplaceDialog from "lib/electron/dialog/confirmConvertMo
 import { ScriptDataTable } from "shared/lib/scriptDataTable/types";
 import {
   csvToScriptDataTable,
+  DataTableCSVVariable,
+  ScriptDataTableImport,
   scriptDataTableToCSV,
 } from "shared/lib/scriptDataTable/csv";
 import {
@@ -299,7 +303,7 @@ export const createPreferences = async () => {
   // Create the browser window.
   preferencesWindow = new BrowserWindow({
     width: 600,
-    height: 400,
+    height: 480,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -1130,6 +1134,13 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
+  "dialog:confirm-delete-variable",
+  async (_event, name: string, usesNames: string[]) => {
+    return confirmDeleteVariable(name, usesNames);
+  },
+);
+
+ipcMain.handle(
   "dialog:confirm-tracker-unsaved",
   async (_event, name: string) => {
     return confirmUnsavedChangesTrackerDialog(name);
@@ -1401,10 +1412,10 @@ ipcMain.handle("debugger:pause-on-var", (_event, enabled: boolean) => {
 
 ipcMain.handle(
   "debugger:set-global",
-  (_event, symbol: string, value: number) => {
+  (_event, symbol: string, value: number, index: number) => {
     sendToGameWindow("debugger:data", {
       action: "set-global",
-      data: { symbol, value },
+      data: { symbol, value, index },
     });
   },
 );
@@ -1625,7 +1636,13 @@ ipcMain.handle(
             "COMPILER_STARTING_EMULATOR",
           )}...`,
         );
-        if (debuggerEnabled) {
+
+        const emulatorPath = options.debugEnabled
+          ? ""
+          : String((await settingsGet("emulatorPath")) || "");
+        const romPath = Path.join(outputRoot, "build", "rom", romFilename);
+
+        if (debuggerEnabled && emulatorPath === "") {
           const { memoryMap, globalVariables } = await readDebuggerSymbols(
             outputRoot,
             romStem,
@@ -1650,12 +1667,24 @@ ipcMain.handle(
             sceneMap: compiledData.sceneMap,
             gbvmScripts,
           });
+        } else if (emulatorPath !== "") {
+          if (playWindow) {
+            playWindow.close();
+          }
         }
-        createPlay(
-          `file://${outputRoot}/build/web/index.html`,
-          sgbEnabled && colorMode === "mono",
-          debuggerEnabled,
-        );
+
+        if (emulatorPath === "") {
+          createPlay(
+            `file://${outputRoot}/build/web/index.html`,
+            sgbEnabled && colorMode === "mono",
+            debuggerEnabled,
+          );
+        } else if (emulatorPath === SYSTEM_DEFAULT_APP) {
+          open(romPath);
+        } else {
+          const app = emulatorPath;
+          open(romPath, { app });
+        }
       }
 
       const buildTime = Date.now() - buildStartTime;
@@ -1905,13 +1934,18 @@ ipcMain.handle(
 
 ipcMain.handle(
   "data-table:export-csv",
-  async (_event, table: ScriptDataTable, constants: Constant[]) => {
+  async (
+    _event,
+    table: ScriptDataTable,
+    constants: Constant[],
+    variables: DataTableCSVVariable[],
+  ) => {
     const savePath = dialog.showSaveDialogSync({
       defaultPath: `${table.label || "data"}.csv`,
       filters: [{ name: "CSV", extensions: ["csv"] }],
     });
     if (!savePath) return;
-    const data = scriptDataTableToCSV(table, constants);
+    const data = scriptDataTableToCSV(table, constants, variables);
     await writeFile(savePath, data);
   },
 );
@@ -1921,7 +1955,8 @@ ipcMain.handle(
   async (
     _event,
     constants: Constant[],
-  ): Promise<ScriptDataTable | undefined> => {
+    variables: DataTableCSVVariable[],
+  ): Promise<ScriptDataTableImport | undefined> => {
     const files = dialog.showOpenDialogSync({
       properties: ["openFile"],
       filters: [{ name: "CSV", extensions: ["csv"] }],
@@ -1930,7 +1965,7 @@ ipcMain.handle(
       return undefined;
     }
     const data = await readFile(files[0], "utf8");
-    return csvToScriptDataTable(data, constants);
+    return csvToScriptDataTable(data, constants, variables);
   },
 );
 
