@@ -1967,6 +1967,7 @@ class ScriptBuilder extends ScriptBuilderBase {
   _resolveArrayReferenceArgument = (
     variable: string | ScriptValue | ScriptBuilderFunctionArg,
     argumentId: string,
+    requiredLength: number,
   ): { alias: string; indirect: boolean } => {
     let rootVariable: ScriptBuilderVariable;
     if (typeof variable === "string" || this._isFunctionArg(variable)) {
@@ -1989,6 +1990,14 @@ class ScriptBuilder extends ScriptBuilderBase {
       if (!resolvedVariable.indirect || !resolvedVariable.array) {
         throw new Error(
           `Array reference argument "${argumentId}" must be an array variable`,
+        );
+      }
+      if (
+        resolvedVariable.length === undefined ||
+        resolvedVariable.length < requiredLength
+      ) {
+        throw new Error(
+          `Array reference argument "${argumentId}" requires at least ${requiredLength} elements, but the provided array has ${resolvedVariable.length ?? "unknown"}`,
         );
       }
       return {
@@ -2014,6 +2023,11 @@ class ScriptBuilder extends ScriptBuilderBase {
     if (variableDefinition?.type !== "array") {
       throw new Error(
         `Array reference argument "${argumentId}" must be an array variable`,
+      );
+    }
+    if (variableDefinition.length < requiredLength) {
+      throw new Error(
+        `Array reference argument "${argumentId}" requires at least ${requiredLength} elements, but the provided array has ${variableDefinition.length}`,
       );
     }
 
@@ -2118,6 +2132,7 @@ class ScriptBuilder extends ScriptBuilderBase {
             const arrayReference = this._resolveArrayReferenceArgument(
               variableValue,
               variableArg.id,
+              variableArg.length,
             );
             if (arrayReference.indirect) {
               this._stackPush(arrayReference.alias);
@@ -2247,6 +2262,7 @@ class ScriptBuilder extends ScriptBuilderBase {
       indirect: boolean,
       value: string,
       array = false,
+      length?: number,
     ) => {
       if (!argLookup[type].get(value)) {
         const newArg = `.SCRIPT_ARG_${
@@ -2256,6 +2272,7 @@ class ScriptBuilder extends ScriptBuilderBase {
           type: "argument",
           indirect,
           array,
+          length,
           symbol: newArg,
         });
         numArgs--;
@@ -2300,6 +2317,9 @@ class ScriptBuilder extends ScriptBuilderBase {
             variableArg.passByReference !== false,
             variableArg.id,
             variableArg.passByReference === "array",
+            variableArg.passByReference === "array"
+              ? variableArg.length
+              : undefined,
           );
         }
       }
@@ -2880,6 +2900,202 @@ class ScriptBuilder extends ScriptBuilderBase {
   variablesReset = () => {
     this._addComment("Variables Reset");
     this._memSet(0, 0, "MAX_GLOBAL_VARS");
+  };
+
+  // --------------------------------------------------------------------------
+  // Arrays
+
+  arraySetToScriptValues = (
+    array: ScriptBuilderVariable,
+    values: ScriptValue[],
+  ) => {
+    const length = this._getArrayLength(array);
+    const rootVariable = this._isVariableReference(array) ? array.value : array;
+
+    this._addComment("Array Set");
+
+    const compiledValues = Array.from({ length }, (_, i) => {
+      const value = values?.[i] ?? { type: "number", value: 0 };
+
+      const [rpnOps, fetchOps] = precompileScriptValue(
+        optimiseScriptValue(value),
+        `array_${i}_`,
+      );
+
+      return { rpnOps, fetchOps };
+    });
+
+    const localsLookup = this._performFetchOperations(
+      compiledValues.flatMap(({ fetchOps }) => fetchOps),
+    );
+
+    const rpn = this._rpn();
+
+    if (this._isIndirectVariable(rootVariable)) {
+      const addrRef = this._declareLocal("array_addr", 1, true);
+      const alias = this.getVariableAlias(rootVariable);
+
+      for (let i = 0; i < length; i++) {
+        this._performValueRPN(rpn, compiledValues[i].rpnOps, localsLookup);
+
+        if (i === 0) {
+          rpn.refSetInd(alias);
+        } else {
+          rpn
+            .ref(alias)
+            .int16(i)
+            .operator(".ADD")
+            .refSet(addrRef)
+            .refSetInd(addrRef);
+        }
+      }
+    } else {
+      for (let i = 0; i < length; i++) {
+        this._performValueRPN(rpn, compiledValues[i].rpnOps, localsLookup);
+
+        rpn.refSetVariable({
+          type: "variable",
+          value: rootVariable,
+          index: {
+            type: "number",
+            value: i,
+          },
+        });
+      }
+    }
+
+    rpn.stop();
+
+    this._addNL();
+  };
+
+  arrayShuffle = (array: ScriptBuilderVariable) => {
+    const length = this._getArrayLength(array);
+    if (length < 2) {
+      return;
+    }
+
+    const rootVariable = this._isVariableReference(array) ? array.value : array;
+
+    const loopId = this.getNextLabel();
+    const indexRef = this._declareLocal("array_index", 1, true);
+    const arrayPtrRef = this._declareLocal("array_ptr", 1, true);
+    const rndArrayPtrRef = this._declareLocal("rnd_array_ptr", 1, true);
+
+    this._addComment("Array Shuffle");
+
+    this._setConst(indexRef, 1);
+    this._label(loopId);
+
+    const rpn = this._rpn();
+
+    rpn
+      .comment("rndArrayPtr = &array[random(0, index)]")
+      .addrVariable(rootVariable)
+      .ref(indexRef)
+      .int8(1)
+      .operator(".ADD")
+      .operator(".RND")
+      .operator(".ADD")
+      .refSet(rndArrayPtrRef)
+
+      .comment("arrayPtr = &array[index]")
+      .addrVariable(rootVariable)
+      .ref(indexRef)
+      .operator(".ADD")
+      .refSet(arrayPtrRef)
+
+      .comment("Swap")
+      .refInd(rndArrayPtrRef)
+      .refInd(arrayPtrRef)
+      .refSetInd(rndArrayPtrRef)
+      .refSetInd(arrayPtrRef)
+
+      .comment("index++")
+      .ref(indexRef)
+      .int8(1)
+      .operator(".ADD")
+      .refSet(indexRef)
+
+      .stop();
+
+    this._ifConst(".LT", indexRef, length, loopId, 0);
+
+    this._addNL();
+  };
+
+  ifValueInArray = (
+    value: ScriptValue,
+    array: ScriptBuilderVariable,
+    truePath: ScriptEvent[] | ScriptBuilderPathFunction = [],
+    falsePath: ScriptEvent[] | ScriptBuilderPathFunction = [],
+  ) => {
+    const length = this._getArrayLength(array);
+    const rootVariable = this._isVariableReference(array) ? array.value : array;
+    const loopId = this.getNextLabel();
+    const foundLabel = this.getNextLabel();
+    const endLabel = this.getNextLabel();
+    const indexRef = this._declareLocal("array_index", 1, true);
+    const valueRef = this._declareLocal("value_ref", 1, true);
+    const arrayPtrRef = this._declareLocal("array_ptr", 1, true);
+
+    this._addComment("If Value In Array");
+
+    const [rpnOps, fetchOps] = precompileScriptValue(
+      optimiseScriptValue(value),
+    );
+    const localsLookup = this._performFetchOperations(fetchOps);
+
+    const setupRpn = this._rpn();
+    setupRpn.comment("searchValue = value");
+    this._performValueRPN(setupRpn, rpnOps, localsLookup);
+
+    setupRpn
+      .refSet(valueRef)
+      .comment("index = 0")
+      .int8(0)
+      .refSet(indexRef)
+      .stop();
+
+    this._label(loopId);
+
+    this._rpn()
+      .comment("arrayPtr = &array[index]")
+      .addrVariable(rootVariable)
+      .ref(indexRef)
+      .operator(".ADD")
+      .refSet(arrayPtrRef)
+
+      .comment("array[index] == searchValue")
+      .refInd(arrayPtrRef)
+      .ref(valueRef)
+      .operator(".EQ")
+
+      .comment("index++")
+      .ref(indexRef)
+      .int8(1)
+      .operator(".ADD")
+      .refSet(indexRef)
+
+      .stop();
+
+    // If value found
+    this._ifConst(".NE", ".ARG0", 0, foundLabel, 1);
+
+    // If array elements remaining
+    this._ifConst(".LT", indexRef, length, loopId, 0);
+
+    this._addComment("-- If value not found");
+    this._compilePath(falsePath);
+    this._jump(endLabel);
+
+    this._addComment("-- If value found");
+    this._label(foundLabel);
+    this._compilePath(truePath);
+
+    this._label(endLabel);
+
+    this._addNL();
   };
 
   // --------------------------------------------------------------------------
@@ -3697,8 +3913,8 @@ class ScriptBuilder extends ScriptBuilderBase {
     packetSize: number,
   ) => {
     if (packetSize > 1) {
-      this._assertVariableIsArrayOfMinimumSize(sendVariable, packetSize);
-      this._assertVariableIsArrayOfMinimumSize(receiveVariable, packetSize);
+      this._assertArrayLengthAtLeast(sendVariable, packetSize);
+      this._assertArrayLengthAtLeast(receiveVariable, packetSize);
     }
     this._sioExchangeVariables(
       this._resolveVariableAddress(sendVariable),
@@ -3766,6 +3982,39 @@ class ScriptBuilder extends ScriptBuilderBase {
 
   // --------------------------------------------------------------------------
   // Control Flow
+
+  arrayForEach = (
+    variable: ScriptBuilderVariable,
+    array: ScriptBuilderVariable,
+    truePath: ScriptEvent[] | ScriptBuilderPathFunction = [],
+  ) => {
+    const length = this._getArrayLength(array);
+    const rootVariable = this._isVariableReference(array) ? array.value : array;
+    const loopId = this.getNextLabel();
+    const indexRef = this._declareLocal("array_index", 1, true);
+    const arrayElement: ScriptBuilderVariable = {
+      type: "variable",
+      value: rootVariable,
+      index: {
+        type: "variable",
+        value: indexRef,
+      },
+    };
+
+    this._addComment("Array For Each");
+    this._setConst(indexRef, 0);
+    this._label(loopId);
+    this._setVariableToVariable(variable, arrayElement);
+    this._compilePath(truePath);
+    this._rpn() //
+      .ref(indexRef)
+      .int8(1)
+      .operator(".ADD")
+      .refSet(indexRef)
+      .stop();
+    this._ifConst(".LT", indexRef, length, loopId, 0);
+    this._addNL();
+  };
 
   whileScriptValue = (
     value: ScriptValue,

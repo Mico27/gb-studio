@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add ability to create variables directly from variable select inputs by entering a new name
 - Add ability to use array elements in script events and expressions
 - Add ability to set script parameters as "Array Reference", allowing parameters to be treated as arrays within the script
+- Add "For Each Array Element" event to loop through array contents
+- Add "len" function to script values and expressions to get the size of an array
+- Add array helper events "Array Set To Values", "Shuffle Array" and "If Value In Array" [@pau-tomas](https://github.com/pau-tomas)
 
 ### Changed
 
@@ -29,9 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve actor and trigger dragging so entities keep their grabbed offset instead of snapping position to the cursor
 - Pressing `s` while creating a scene now toggles between creating an Image Scene or Tilemap Scene
 - Link Transfer events with packet size greater than 1 now require arrays for both the send and receive variables, ensuring the transferred values occupy consecutive memory
+- Identical scripts are now deduped in ROM reusing existing scripts, e.g. using prefab actor in two scenes will use only a single script where possible [@Mico27](https://github.com/Mico27)
 - Updated Polish localisation. [@ReptiIe](https://github.com/ReptiIe)
 - Updated Japanese localisation. [@tomo666](https://github.com/tomo666)
 - Updated Ukrainian localisation. [@AmakerGame](https://github.com/AmakerGame)
+- Updated Brazilian Portuguese localisation. [@Italo-Soares-Tradutor](https://github.com/Italo-Soares-Tradutor)
 
 ### Fixed
 
@@ -51,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix issue where clicking into Constant name field and leaving without changing anything would cause compiled symbol to change
 - Fix issue where changing a Constant's name and clicking away could sometimes cause name change to be lost
 - Fix issue where renaming a variable to have the same name but with different capitalisation could cause compiled symbol to change
+- Fix issue where debugger wouldn't display prefab scripts
+- Fix issue where new projects would git ignore FX Hammer files by default
 
 ## [4.3.2] - 2026-06-22
 

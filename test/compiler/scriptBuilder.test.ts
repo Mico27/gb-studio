@@ -54,6 +54,9 @@ const createTestScriptBuilder = async (
   return { sb, output };
 };
 
+const withoutComments = (output: string[]) =>
+  output.filter((line) => !line.trimStart().startsWith(";"));
+
 test("Should be able to set active actor to player", async () => {
   const output: string[] = [];
   const scriptEventHandlers = await getTestScriptHandlers();
@@ -972,7 +975,7 @@ test("Should make statically and dynamically indexed arrays human readable", asy
           name: "Values",
           symbol: "var_values",
           type: "array",
-          size: 4,
+          length: 4,
         },
         [indexId]: {
           id: indexId,
@@ -1024,6 +1027,7 @@ describe("ScriptBuilderVariable values", () => {
     indirect: true,
     array: true,
     symbol: ".SCRIPT_ARG_INDIRECT_2_VARIABLE",
+    length: 3,
   };
 
   const cases: {
@@ -1117,7 +1121,7 @@ describe("ScriptBuilderVariable values", () => {
             name: "Array",
             symbol: "var_array",
             type: "array",
-            size: 4,
+            length: 4,
           },
           [indexId]: {
             id: indexId,
@@ -1574,7 +1578,7 @@ test("Should increment an array variable with a static index", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -1611,7 +1615,7 @@ test("Should reject data peek from a dynamically indexed array element", async (
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         [sourceIndexId]: {
           id: sourceIndexId,
@@ -1658,7 +1662,7 @@ test("Should data peek into a dynamically indexed array element", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         [destinationIndexId]: {
           id: destinationIndexId,
@@ -1750,7 +1754,7 @@ test("Should reject multiword link transfer with non-array variables", async () 
   );
 });
 
-test("Should link transfer between sufficiently sized arrays", async () => {
+test("Should link transfer between arrays of sufficient length", async () => {
   const sendVariableId = "11111111-1111-1111-1111-111111111111";
   const receiveVariableId = "22222222-2222-2222-2222-222222222222";
   const { sb, output } = await createTestScriptBuilder(
@@ -1762,14 +1766,14 @@ test("Should link transfer between sufficiently sized arrays", async () => {
           name: "Send Array",
           symbol: "var_send_array",
           type: "array",
-          size: 3,
+          length: 3,
         },
         [receiveVariableId]: {
           id: receiveVariableId,
           name: "Receive Array",
           symbol: "var_receive_array",
           type: "array",
-          size: 2,
+          length: 2,
         },
       },
     },
@@ -1798,14 +1802,14 @@ test("Should reject link transfers larger than a global array", async () => {
           name: "Send Array",
           symbol: "var_send_array",
           type: "array",
-          size: 2,
+          length: 2,
         },
         [receiveVariableId]: {
           id: receiveVariableId,
           name: "Receive Array",
           symbol: "var_receive_array",
           type: "array",
-          size: 3,
+          length: 3,
         },
       },
     },
@@ -1817,7 +1821,7 @@ test("Should reject link transfers larger than a global array", async () => {
       { type: "variable", value: receiveVariableId },
       3,
     ),
-  ).toThrow('Array "Send Array" with size 2 is too small for required size 3');
+  ).toThrow("Array with length 2 is too short for required length 3");
 });
 
 test("Should link transfer multiword custom event array parameters", async () => {
@@ -1826,12 +1830,14 @@ test("Should link transfer multiword custom event array parameters", async () =>
     type: "argument" as const,
     indirect: true,
     array: true,
+    length: 2,
     symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
   };
   const receiveVariable = {
     type: "argument" as const,
     indirect: true,
     array: true,
+    length: 2,
     symbol: ".SCRIPT_ARG_INDIRECT_1_VARIABLE",
   };
 
@@ -1865,7 +1871,7 @@ test("Should reject indexed arrays for multiword link transfers", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -1917,7 +1923,7 @@ test("Should pass an array root to an array-reference script argument", async ()
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       customEvents: [
@@ -1930,6 +1936,7 @@ test("Should pass an array root to an array-reference script argument", async ()
               id: "V0",
               name: "Array",
               passByReference: "array",
+              length: 3,
             },
           },
           actors: {},
@@ -1952,17 +1959,17 @@ test("Should pass an array root to an array-reference script argument", async ()
   );
 });
 
-test("Should reject an indexed element passed to an array-reference script argument", async () => {
+test("Should reject an too-short array passed to an array-reference script argument", async () => {
   const { sb } = await createTestScriptBuilder(
     {},
     {
       variablesLookup: {
         "11111111-1111-1111-1111-111111111111": {
           id: "11111111-1111-1111-1111-111111111111",
-          name: "Array",
-          symbol: "var_array",
+          name: "Small Array",
+          symbol: "var_small_array",
           type: "array",
-          size: 4,
+          length: 2,
         },
       },
       customEvents: [
@@ -1975,6 +1982,53 @@ test("Should reject an indexed element passed to an array-reference script argum
               id: "V0",
               name: "Array",
               passByReference: "array",
+              length: 3,
+            },
+          },
+          actors: {},
+          symbol: "script_1",
+          script: [],
+        },
+      ],
+    },
+  );
+
+  expect(() =>
+    sb.callScript("script1", {
+      "$variable[V0]$": {
+        type: "variable",
+        value: "11111111-1111-1111-1111-111111111111",
+      },
+    }),
+  ).toThrow(
+    'Array reference argument "V0" requires at least 3 elements, but the provided array has 2',
+  );
+});
+
+test("Should reject an indexed element passed to an array-reference script argument", async () => {
+  const { sb } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        "11111111-1111-1111-1111-111111111111": {
+          id: "11111111-1111-1111-1111-111111111111",
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 4,
+        },
+      },
+      customEvents: [
+        {
+          id: "script1",
+          name: "Array Script",
+          description: "",
+          variables: {
+            V0: {
+              id: "V0",
+              name: "Array",
+              passByReference: "array",
+              length: 8,
             },
           },
           actors: {},
@@ -2020,6 +2074,7 @@ test("Should reject a scalar passed to an array-reference script argument", asyn
               id: "V0",
               name: "Array",
               passByReference: "array",
+              length: 7,
             },
           },
           actors: {},
@@ -2052,6 +2107,7 @@ test("Should pass an array-reference argument root to another script", async () 
               type: "argument",
               indirect: true,
               array: true,
+              length: 2,
               symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
             },
           ],
@@ -2068,6 +2124,7 @@ test("Should pass an array-reference argument root to another script", async () 
               id: "V0",
               name: "Array",
               passByReference: "array",
+              length: 2,
             },
           },
           actors: {},
@@ -2090,6 +2147,145 @@ test("Should pass an array-reference argument root to another script", async () 
   );
 });
 
+test("Should reject a too-short forwarded array-reference argument", async () => {
+  const { sb } = await createTestScriptBuilder(
+    {},
+    {
+      argLookup: {
+        variable: new Map([
+          [
+            "V1",
+            {
+              type: "argument",
+              indirect: true,
+              array: true,
+              length: 2,
+              symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+            },
+          ],
+        ]),
+        actor: new Map(),
+      },
+      customEvents: [
+        {
+          id: "script1",
+          name: "Array Script",
+          description: "",
+          variables: {
+            V0: {
+              id: "V0",
+              name: "Array",
+              passByReference: "array",
+              length: 3,
+            },
+          },
+          actors: {},
+          symbol: "script_1",
+          script: [],
+        },
+      ],
+    },
+  );
+
+  expect(() =>
+    sb.callScript("script1", {
+      "$variable[V0]$": {
+        type: "variable",
+        value: "V1",
+      },
+    }),
+  ).toThrow(
+    'Array reference argument "V0" requires at least 3 elements, but the provided array has 2',
+  );
+});
+
+test("Should loop over every element of an array", async () => {
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        "11111111-1111-1111-1111-111111111111": {
+          id: "11111111-1111-1111-1111-111111111111",
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 3,
+        },
+        "22222222-2222-2222-2222-222222222222": {
+          id: "22222222-2222-2222-2222-222222222222",
+          name: "Current Value",
+          symbol: "var_current_value",
+          type: "number",
+        },
+      },
+    },
+  );
+
+  sb.arrayForEach(
+    "22222222-2222-2222-2222-222222222222",
+    {
+      type: "variable",
+      value: "11111111-1111-1111-1111-111111111111",
+    },
+    () => sb.variableInc("22222222-2222-2222-2222-222222222222"),
+  );
+
+  expect(output).toContain("        ; Array For Each");
+  expect(output).toContain("        ; Variable Increment By 1");
+  expect(
+    output.some(
+      (line) => line.includes("VM_SET_CONST") && line.includes("ARRAY_INDEX"),
+    ),
+  ).toBe(true);
+  expect(
+    output.some(
+      (line) => line.includes("VM_SET") && line.includes("VAR_CURRENT_VALUE"),
+    ),
+  ).toBe(true);
+  expect(
+    output.some(
+      (line) => line.includes(".LT") && line.includes("ARRAY_INDEX, 3"),
+    ),
+  ).toBe(true);
+  expect(output.some((line) => line.includes("VAR_ARRAY"))).toBe(true);
+});
+
+test("Should loop over every element of a custom event array parameter", async () => {
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      argLookup: {
+        variable: new Map([
+          [
+            "V0",
+            {
+              type: "argument",
+              indirect: true,
+              array: true,
+              length: 2,
+              symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+            },
+          ],
+        ]),
+        actor: new Map(),
+      },
+    },
+  );
+
+  sb.arrayForEach("0", { type: "variable", value: "V0" }, () =>
+    sb.variableInc("0"),
+  );
+
+  expect(
+    output.some((line) => line.includes(".SCRIPT_ARG_INDIRECT_0_VARIABLE")),
+  ).toBe(true);
+  expect(
+    output.some(
+      (line) => line.includes(".LT") && line.includes("ARRAY_INDEX, 2"),
+    ),
+  ).toBe(true);
+});
+
 test("Should increment an array variable with a constant index", async () => {
   const { sb, output } = await createTestScriptBuilder(
     {},
@@ -2100,7 +2296,7 @@ test("Should increment an array variable with a constant index", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       constantsLookup: {
@@ -2145,7 +2341,7 @@ test("Should increment an array variable with a variable index", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         "22222222-2222-2222-2222-222222222222": {
           id: "22222222-2222-2222-2222-222222222222",
@@ -2177,6 +2373,130 @@ test("Should increment an array variable with a variable index", async () => {
   expect(output.join("\n")).not.toContain(".LOCAL_TMP1_ARRAY_PTR");
 });
 
+test("Should calculate indexed array addresses once within a single RPN operation", async () => {
+  const sourceArrayId = "11111111-1111-1111-1111-111111111111";
+  const destinationArrayId = "22222222-2222-2222-2222-222222222222";
+  const indexId = "33333333-3333-3333-3333-333333333333";
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [sourceArrayId]: {
+          id: sourceArrayId,
+          name: "Source",
+          symbol: "var_source",
+          type: "array",
+          length: 4,
+        },
+        [destinationArrayId]: {
+          id: destinationArrayId,
+          name: "Destination",
+          symbol: "var_destination",
+          type: "array",
+          length: 4,
+        },
+        [indexId]: {
+          id: indexId,
+          name: "Index",
+          symbol: "var_index",
+          type: "number",
+        },
+      },
+    },
+  );
+  const indexedVariable = (value: string) => ({
+    type: "variable" as const,
+    value,
+    index: { type: "variable" as const, value: indexId },
+  });
+
+  sb.variableSetToScriptValue(indexedVariable(destinationArrayId), {
+    type: "add",
+    valueA: indexedVariable(sourceArrayId),
+    valueB: indexedVariable(destinationArrayId),
+  });
+
+  expect(withoutComments(output)).toEqual([
+    "        VM_RPN",
+    "            .R_INT16    VAR_SOURCE",
+    "            .R_REF      VAR_INDEX",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET  .LOCAL_TMP0_ARRAY_PTR",
+    "            .R_REF_IND  .LOCAL_TMP0_ARRAY_PTR",
+    "            .R_INT16    VAR_DESTINATION",
+    "            .R_REF      VAR_INDEX",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+    "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+    "            .R_STOP",
+    "",
+  ]);
+});
+
+test("Should calculate different indexes on the same array separately", async () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+  const firstIndexId = "22222222-2222-2222-2222-222222222222";
+  const secondIndexId = "33333333-3333-3333-3333-333333333333";
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [arrayId]: {
+          id: arrayId,
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 4,
+        },
+        [firstIndexId]: {
+          id: firstIndexId,
+          name: "First Index",
+          symbol: "var_first_index",
+          type: "number",
+        },
+        [secondIndexId]: {
+          id: secondIndexId,
+          name: "Second Index",
+          symbol: "var_second_index",
+          type: "number",
+        },
+      },
+    },
+  );
+  const indexedVariable = (index: string) => ({
+    type: "variable" as const,
+    value: arrayId,
+    index: { type: "variable" as const, value: index },
+  });
+
+  sb.variablesOperation(
+    indexedVariable(firstIndexId),
+    ".ADD",
+    indexedVariable(secondIndexId),
+    false,
+  );
+
+  expect(withoutComments(output)).toEqual([
+    "        VM_RPN",
+    "            .R_INT16    VAR_ARRAY",
+    "            .R_REF      VAR_FIRST_INDEX",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET  .LOCAL_TMP0_ARRAY_PTR",
+    "            .R_REF_IND  .LOCAL_TMP0_ARRAY_PTR",
+    "            .R_INT16    VAR_ARRAY",
+    "            .R_REF      VAR_SECOND_INDEX",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+    "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_PTR",
+    "            .R_STOP",
+    "",
+  ]);
+});
+
 test("Should evaluate expressions containing array offsets", async () => {
   const { sb, output } = await createTestScriptBuilder(
     {},
@@ -2187,7 +2507,7 @@ test("Should evaluate expressions containing array offsets", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         "22222222-2222-2222-2222-222222222222": {
           id: "22222222-2222-2222-2222-222222222222",
@@ -2228,7 +2548,7 @@ test("Should evaluate expressions containing engine constant array offsets", asy
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       engineConstants: {
@@ -2246,6 +2566,133 @@ test("Should evaluate expressions containing engine constant array offsets", asy
   expect(output.join("\n")).not.toContain("ARRAY_PTR");
 });
 
+test("Should compile array length in a math expression as a constant", async () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [arrayId]: {
+          id: arrayId,
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 4,
+        },
+      },
+    },
+  );
+
+  sb.variableEvaluateExpression("0", `len($${arrayId}$) + 1`);
+
+  const script = output.join("\n");
+  expect(script).toContain(".R_INT16    4");
+  expect(script).not.toContain(".R_REF      VAR_ARRAY");
+});
+
+test("Should reject an indexed array length in a math expression", async () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+  const { sb } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [arrayId]: {
+          id: arrayId,
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 4,
+        },
+      },
+    },
+  );
+
+  expect(() =>
+    sb.variableEvaluateExpression("0", `len($${arrayId}$[0])`),
+  ).toThrow("len() requires an array variable");
+});
+
+test("Should compile structured array length as a constant", async () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [arrayId]: {
+          id: arrayId,
+          name: "Array",
+          symbol: "var_array",
+          type: "array",
+          length: 5,
+        },
+      },
+    },
+  );
+
+  sb.variableSetToScriptValue("0", {
+    type: "len",
+    value: { type: "variable", value: arrayId },
+  });
+
+  expect(output.join("\n")).toContain(".R_INT16    5");
+});
+
+test("Should compile custom event array parameter length as a constant", async () => {
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      argLookup: {
+        variable: new Map([
+          [
+            "V0",
+            {
+              type: "argument",
+              indirect: true,
+              array: true,
+              length: 6,
+              symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+            },
+          ],
+        ]),
+        actor: new Map(),
+      },
+    },
+  );
+
+  sb.variableSetToScriptValue("0", {
+    type: "len",
+    value: { type: "variable", value: "V0" },
+  });
+
+  const script = output.join("\n");
+  expect(script).toContain(".R_INT16    6");
+  expect(script).not.toContain(".SCRIPT_ARG_INDIRECT_0_VARIABLE");
+});
+
+test("Should reject the length of a scalar variable", async () => {
+  const scalarId = "11111111-1111-1111-1111-111111111111";
+  const { sb } = await createTestScriptBuilder(
+    {},
+    {
+      variablesLookup: {
+        [scalarId]: {
+          id: scalarId,
+          name: "Scalar",
+          symbol: "var_scalar",
+          type: "number",
+        },
+      },
+    },
+  );
+
+  expect(() =>
+    sb.variableSetToScriptValue("0", {
+      type: "len",
+      value: { type: "variable", value: scalarId },
+    }),
+  ).toThrow("Variable must be an array");
+});
+
 test("Should read an indexed array variable from a ScriptValue", async () => {
   const { sb, output } = await createTestScriptBuilder(
     {},
@@ -2256,7 +2703,7 @@ test("Should read an indexed array variable from a ScriptValue", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -2283,7 +2730,7 @@ test("Should read an array using an index expression", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         "22222222-2222-2222-2222-222222222222": {
           id: "22222222-2222-2222-2222-222222222222",
@@ -2324,14 +2771,14 @@ test("Should read an array using a nested indexed variable expression", async ()
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 8,
+          length: 8,
         },
         "22222222-2222-2222-2222-222222222222": {
           id: "22222222-2222-2222-2222-222222222222",
           name: "Other",
           symbol: "var_other",
           type: "array",
-          size: 8,
+          length: 8,
         },
         "33333333-3333-3333-3333-333333333333": {
           id: "33333333-3333-3333-3333-333333333333",
@@ -2387,7 +2834,7 @@ test("Should fold a static array index expression", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -2416,7 +2863,7 @@ test("Should reject an out of bounds constant index expression", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       constantsLookup: {
@@ -2443,7 +2890,9 @@ test("Should reject an out of bounds constant index expression", async () => {
         valueB: { type: "number", value: 1 },
       },
     }),
-  ).toThrow('Array index 4 is out of bounds for variable "Array" with size 4');
+  ).toThrow(
+    'Array index 4 is out of bounds for variable "Array" with length 4',
+  );
 });
 
 test("Should set a camera property from an indexed ScriptValue", async () => {
@@ -2456,7 +2905,7 @@ test("Should set a camera property from an indexed ScriptValue", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -2483,7 +2932,7 @@ test("Should set an engine field from an indexed ScriptValue", async () => {
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       engineFields: {
@@ -2540,7 +2989,7 @@ test("Should replace indexed references to number variables with variable symbol
 });
 
 test.each([-1, 4])(
-  "Should reject static array index %s outside the declared size",
+  "Should reject static array index %s outside the declared length",
   async (index) => {
     const { sb } = await createTestScriptBuilder(
       {},
@@ -2551,7 +3000,7 @@ test.each([-1, 4])(
             name: "Array",
             symbol: "var_array",
             type: "array",
-            size: 4,
+            length: 4,
           },
         },
       },
@@ -2564,12 +3013,12 @@ test.each([-1, 4])(
         index: { type: "number", value: index },
       }),
     ).toThrow(
-      `Array index ${index} is out of bounds for variable "Array" with size 4`,
+      `Array index ${index} is out of bounds for variable "Array" with length 4`,
     );
   },
 );
 
-test("Should reject constant array indices outside the declared size", async () => {
+test("Should reject constant array indices outside the declared length", async () => {
   const { sb } = await createTestScriptBuilder(
     {},
     {
@@ -2579,7 +3028,7 @@ test("Should reject constant array indices outside the declared size", async () 
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
       constantsLookup: {
@@ -2602,7 +3051,83 @@ test("Should reject constant array indices outside the declared size", async () 
         value: "33333333-3333-3333-3333-333333333333",
       },
     }),
-  ).toThrow('Array index 4 is out of bounds for variable "Array" with size 4');
+  ).toThrow(
+    'Array index 4 is out of bounds for variable "Array" with length 4',
+  );
+});
+
+test("Should reject invalid static indexes on an array-reference script argument", async () => {
+  const { sb } = await createTestScriptBuilder(
+    {},
+    {
+      argLookup: {
+        variable: new Map([
+          [
+            "V0",
+            {
+              type: "argument",
+              indirect: true,
+              array: true,
+              length: 3,
+              symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+            },
+          ],
+        ]),
+        actor: new Map(),
+      },
+    },
+  );
+  const indexedVariable = (index: number) => ({
+    type: "variable" as const,
+    value: "V0",
+    index: { type: "number" as const, value: index },
+  });
+
+  expect(() => sb.variableInc(indexedVariable(-1))).toThrow(
+    "Array index -1 cannot be negative",
+  );
+  expect(() => sb.variableInc(indexedVariable(3))).toThrow(
+    "Index access 3 is beyond size of array with length 3",
+  );
+});
+
+test("Should use an array-reference root directly for index zero", async () => {
+  const { sb, output } = await createTestScriptBuilder(
+    {},
+    {
+      argLookup: {
+        variable: new Map([
+          [
+            "V0",
+            {
+              type: "argument",
+              indirect: true,
+              array: true,
+              length: 3,
+              symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+            },
+          ],
+        ]),
+        actor: new Map(),
+      },
+    },
+  );
+
+  sb.variableInc({
+    type: "variable",
+    value: "V0",
+    index: { type: "number", value: 0 },
+  });
+
+  expect(withoutComments(output)).toEqual([
+    "        VM_RPN",
+    "            .R_REF_IND  .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+    "            .R_INT8     1",
+    "            .R_OPERATOR .ADD",
+    "            .R_REF_SET_IND .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+    "            .R_STOP",
+    "",
+  ]);
 });
 
 test("Should read an indexed array through a by-reference script argument", async () => {
@@ -2837,7 +3362,7 @@ test("Should not reuse the array pointer local while setting an indexed variable
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
         "22222222-2222-2222-2222-222222222222": {
           id: "22222222-2222-2222-2222-222222222222",
@@ -5085,7 +5610,7 @@ test("Should compile data table lookups into fixed array elements", async () => 
           name: "Array",
           symbol: "var_array",
           type: "array",
-          size: 4,
+          length: 4,
         },
       },
     },
@@ -5140,6 +5665,7 @@ test("Should remap custom event variable arguments used in data table columns", 
             id: "V1",
             name: "Array Variable",
             passByReference: "array",
+            length: 3,
           },
         },
         actors: {},
@@ -5182,7 +5708,7 @@ test("Should remap custom event variable arguments used in data table columns", 
         name: "Array",
         symbol: "var_array",
         type: "array",
-        size: 4,
+        length: 4,
       },
     },
   } as unknown as ScriptBuilderOptions);
@@ -7153,6 +7679,7 @@ _script1::
                 id: "V0",
                 name: "Array",
                 passByReference: "array",
+                length: 2,
               },
               V1: {
                 id: "V1",
@@ -7204,6 +7731,7 @@ _script1::
                 id: "V0",
                 name: "Array",
                 passByReference: "array",
+                length: 2,
               },
               V1: {
                 id: "V1",
@@ -7393,7 +7921,7 @@ _script1::
             name: "Results",
             symbol: "var_results",
             type: "array",
-            size: 20,
+            length: 20,
           },
         },
         customEvents: [
@@ -7513,5 +8041,1324 @@ _script1::
 
         VM_RET_FAR_N            1
 `);
+  });
+});
+
+describe("arraySetToScriptValues", () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+  const sourceId = "22222222-2222-2222-2222-222222222222";
+
+  const arrayVariable = (length: number) => ({
+    id: arrayId,
+    name: "Array",
+    symbol: "var_array",
+    type: "array" as const,
+    length,
+  });
+
+  const indirectArrayArg = (
+    symbol = ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+    length: number,
+  ) => ({
+    type: "argument" as const,
+    indirect: true,
+    array: true,
+    length,
+    symbol,
+  });
+
+  test("should set array to constant values", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [
+      { type: "number", value: 10 },
+      { type: "number", value: 11 },
+      { type: "number", value: 12 },
+    ]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    10",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    11",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_INT16    12",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 2)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should zero out array for missing values", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [{ type: "number", value: 42 }]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    42",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    0",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_INT16    0",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 2)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should zero out entire array when given no values", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, []);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    0",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    0",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_INT16    0",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 2)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should ignore values beyond array length", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(2),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [
+      { type: "number", value: 10 },
+      { type: "number", value: 20 },
+      { type: "number", value: 30 },
+    ]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    10",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    20",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should accept array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(2),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(
+      {
+        type: "variable",
+        value: arrayId,
+      },
+      [
+        { type: "number", value: 10 },
+        { type: "number", value: 20 },
+      ],
+    );
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    10",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    20",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should set array elements from variables", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(2),
+          [sourceId]: {
+            id: sourceId,
+            name: "Source",
+            symbol: "var_source",
+            type: "number",
+          },
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [
+      {
+        type: "variable",
+        value: sourceId,
+      },
+      {
+        type: "number",
+        value: 20,
+      },
+    ]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_REF      VAR_SOURCE",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_INT16    20",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should set indirect array to constant values", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 3)],
+          ]),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues("V0", [
+      { type: "number", value: 10 },
+      { type: "number", value: 20 },
+      { type: "number", value: 30 },
+    ]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    10",
+      "            .R_REF_SET_IND .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    20",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_INT16    30",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    2",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should zero out missing values in indirect array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 3)],
+          ]),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues("V0", [{ type: "number", value: 42 }]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    42",
+      "            .R_REF_SET_IND .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    0",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_INT16    0",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    2",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should set array from property values reusing fetch", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {
+        actors: [
+          {
+            id: "actor1",
+          },
+          {
+            id: "actor2",
+          },
+        ],
+      },
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [
+      {
+        type: "property",
+        target: "actor1",
+        property: "xpos",
+      },
+      {
+        type: "property",
+        target: "actor1",
+        property: "ypos",
+      },
+      {
+        type: "property",
+        target: "actor2",
+        property: "xpos",
+      },
+    ]);
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ACTOR_POS, 1",
+      "        VM_ACTOR_GET_POS        .LOCAL_TMP0_ACTOR_POS",
+      "        VM_SET_CONST            .LOCAL_TMP1_ACTOR_POS, 2",
+      "        VM_ACTOR_GET_POS        .LOCAL_TMP1_ACTOR_POS",
+      "        VM_RPN",
+      "            .R_REF      ^/(.LOCAL_TMP0_ACTOR_POS + 1)/",
+      "            .R_INT16    8",
+      "            .R_OPERATOR .SHR",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 0)/",
+      "            .R_REF      ^/(.LOCAL_TMP0_ACTOR_POS + 2)/",
+      "            .R_INT16    8",
+      "            .R_OPERATOR .SHR",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 1)/",
+      "            .R_REF      ^/(.LOCAL_TMP1_ACTOR_POS + 1)/",
+      "            .R_INT16    8",
+      "            .R_OPERATOR .SHR",
+      "            .R_REF_SET  ^/(VAR_ARRAY + 2)/",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should not overlap fetched locals used by array value RPN", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {
+        actors: [
+          {
+            id: "actor1",
+          },
+          {
+            id: "actor2",
+          },
+        ],
+      },
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(2),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(arrayId, [
+      {
+        type: "property",
+        target: "actor1",
+        property: "xpos",
+      },
+      {
+        type: "property",
+        target: "actor2",
+        property: "xpos",
+      },
+    ]);
+
+    sb._packLocals();
+
+    const actor1Pos = sb.localsLookup[".LOCAL_TMP0_ACTOR_POS"];
+    const actor2Pos = sb.localsLookup[".LOCAL_TMP1_ACTOR_POS"];
+
+    expect(actor1Pos.size).toBe(4);
+    expect(actor2Pos.size).toBe(4);
+
+    expect(
+      actor1Pos.addr + actor1Pos.size <= actor2Pos.addr ||
+        actor2Pos.addr + actor2Pos.size <= actor1Pos.addr,
+    ).toBe(true);
+  });
+
+  test("should not calculate an offset for single element indirect array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 1)],
+          ]),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues("V0", [{ type: "number", value: 42 }]);
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    42",
+      "            .R_REF_SET_IND .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should accept indirect array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 2)],
+          ]),
+        },
+      },
+    );
+
+    sb.arraySetToScriptValues(
+      {
+        type: "variable",
+        value: "V0",
+      },
+      [
+        { type: "number", value: 10 },
+        { type: "number", value: 20 },
+      ],
+    );
+
+    expect(output).toEqual([
+      "        ; Array Set",
+      "        VM_RPN",
+      "            .R_INT16    10",
+      "            .R_REF_SET_IND .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    20",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_INT16    1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_REF_SET_IND .LOCAL_TMP0_ARRAY_ADDR",
+      "            .R_STOP",
+      "",
+    ]);
+  });
+
+  test("should reject non-array variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: {
+            id: arrayId,
+            name: "Variable",
+            symbol: "var_value",
+            type: "number",
+          },
+        },
+      },
+    );
+
+    expect(() =>
+      sb.arraySetToScriptValues(arrayId, [{ type: "number", value: 10 }]),
+    ).toThrow();
+  });
+
+  test("should reject indexed array variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    expect(() =>
+      sb.arraySetToScriptValues(
+        {
+          type: "variable",
+          value: arrayId,
+          index: {
+            type: "number",
+            value: 1,
+          },
+        },
+        [{ type: "number", value: 10 }],
+      ),
+    ).toThrow();
+  });
+
+  test("should reject indirect argument that is not an array", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            [
+              "V0",
+              {
+                type: "argument" as const,
+                indirect: true,
+                array: false,
+                symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+              },
+            ],
+          ]),
+        },
+      },
+    );
+
+    expect(() =>
+      sb.arraySetToScriptValues("V0", [{ type: "number", value: 10 }]),
+    ).toThrow();
+  });
+});
+
+describe("arrayShuffle", () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+
+  const arrayVariable = (length: number) => ({
+    id: arrayId,
+    name: "Array",
+    symbol: "var_array",
+    type: "array" as const,
+    length,
+  });
+
+  const indirectArrayArg = (
+    symbol = ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+    length: number,
+  ) => ({
+    type: "argument" as const,
+    indirect: true,
+    array: true,
+    length,
+    symbol,
+  });
+
+  test("should shuffle array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(5),
+        },
+      },
+    );
+
+    sb.arrayShuffle(arrayId);
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ARRAY_INDEX, 1",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_OPERATOR .RND",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 5, 1$, 0",
+      "",
+    ]);
+  });
+
+  test("should shuffle two element array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(2),
+        },
+      },
+    );
+
+    sb.arrayShuffle(arrayId);
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ARRAY_INDEX, 1",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_OPERATOR .RND",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 2, 1$, 0",
+      "",
+    ]);
+  });
+
+  test("should emit nothing for single element array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(1),
+        },
+      },
+    );
+
+    sb.arrayShuffle(arrayId);
+
+    expect(withoutComments(output)).toEqual([]);
+  });
+
+  test("should accept array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.arrayShuffle({
+      type: "variable",
+      value: arrayId,
+    });
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ARRAY_INDEX, 1",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_OPERATOR .RND",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 3, 1$, 0",
+      "",
+    ]);
+  });
+
+  test("should shuffle indirect array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 5)],
+          ]),
+        },
+      },
+    );
+
+    sb.arrayShuffle("V0");
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ARRAY_INDEX, 1",
+      "1$:",
+      "        VM_RPN",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_OPERATOR .RND",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 5, 1$, 0",
+      "",
+    ]);
+  });
+
+  test("should accept indirect array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 3)],
+          ]),
+        },
+      },
+    );
+
+    sb.arrayShuffle({
+      type: "variable",
+      value: "V0",
+    });
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_SET_CONST            .LOCAL_TMP0_ARRAY_INDEX, 1",
+      "1$:",
+      "        VM_RPN",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_OPERATOR .RND",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP2_RND_ARRAY_PTR",
+      "            .R_REF_SET_IND .LOCAL_TMP1_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 3, 1$, 0",
+      "",
+    ]);
+  });
+
+  test("should emit nothing for single element indirect array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 1)],
+          ]),
+        },
+      },
+    );
+
+    sb.arrayShuffle("V0");
+
+    expect(output).toEqual([]);
+  });
+
+  test("should reject non-array variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: {
+            id: arrayId,
+            name: "Variable",
+            symbol: "var_value",
+            type: "number",
+          },
+        },
+      },
+    );
+
+    expect(() => sb.arrayShuffle(arrayId)).toThrow();
+  });
+
+  test("should reject indexed array variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    expect(() =>
+      sb.arrayShuffle({
+        type: "variable",
+        value: arrayId,
+        index: {
+          type: "number",
+          value: 1,
+        },
+      }),
+    ).toThrow();
+  });
+
+  test("should reject indirect argument that is not an array", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            [
+              "V0",
+              {
+                type: "argument" as const,
+                indirect: true,
+                array: false,
+                symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+              },
+            ],
+          ]),
+        },
+      },
+    );
+
+    expect(() => sb.arrayShuffle("V0")).toThrow();
+  });
+});
+
+describe("ifValueInArray", () => {
+  const arrayId = "11111111-1111-1111-1111-111111111111";
+
+  const arrayVariable = (length: number) => ({
+    id: arrayId,
+    name: "Array",
+    symbol: "var_array",
+    type: "array" as const,
+    length,
+  });
+
+  const indirectArrayArg = (
+    symbol = ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+    length: number,
+  ) => ({
+    type: "argument" as const,
+    indirect: true,
+    array: true,
+    length,
+    symbol,
+  });
+
+  test("should check if value is in array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(5),
+        },
+      },
+    );
+
+    sb.ifValueInArray({ type: "number", value: 13 }, arrayId);
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_RPN",
+      "            .R_INT16    13",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP1_VALUE_REF",
+      "            .R_OPERATOR .EQ",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .NE, .ARG0, 0, 2$, 1",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 5, 1$, 0",
+      "        VM_JUMP                 3$",
+      "2$:",
+      "3$:",
+      "",
+    ]);
+  });
+
+  test("should check single element array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(1),
+        },
+      },
+    );
+
+    sb.ifValueInArray({ type: "number", value: 7 }, arrayId);
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_RPN",
+      "            .R_INT16    7",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP1_VALUE_REF",
+      "            .R_OPERATOR .EQ",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .NE, .ARG0, 0, 2$, 1",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 1, 1$, 0",
+      "        VM_JUMP                 3$",
+      "2$:",
+      "3$:",
+      "",
+    ]);
+  });
+
+  test("should accept array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    sb.ifValueInArray(
+      { type: "number", value: 13 },
+      {
+        type: "variable",
+        value: arrayId,
+      },
+    );
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_RPN",
+      "            .R_INT16    13",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "1$:",
+      "        VM_RPN",
+      "            .R_INT16    VAR_ARRAY",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP1_VALUE_REF",
+      "            .R_OPERATOR .EQ",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .NE, .ARG0, 0, 2$, 1",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 3, 1$, 0",
+      "        VM_JUMP                 3$",
+      "2$:",
+      "3$:",
+      "",
+    ]);
+  });
+
+  test("should check indirect array", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 5)],
+          ]),
+        },
+      },
+    );
+
+    sb.ifValueInArray({ type: "number", value: 13 }, "V0");
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_RPN",
+      "            .R_INT16    13",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "1$:",
+      "        VM_RPN",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP1_VALUE_REF",
+      "            .R_OPERATOR .EQ",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .NE, .ARG0, 0, 2$, 1",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 5, 1$, 0",
+      "        VM_JUMP                 3$",
+      "2$:",
+      "3$:",
+      "",
+    ]);
+  });
+
+  test("should accept indirect array root variable reference", async () => {
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            ["V0", indirectArrayArg(".SCRIPT_ARG_INDIRECT_0_VARIABLE", 3)],
+          ]),
+        },
+      },
+    );
+
+    sb.ifValueInArray(
+      { type: "number", value: 13 },
+      {
+        type: "variable",
+        value: "V0",
+      },
+    );
+
+    expect(withoutComments(output)).toEqual([
+      "        VM_RPN",
+      "            .R_INT16    13",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "1$:",
+      "        VM_RPN",
+      "            .R_REF      .SCRIPT_ARG_INDIRECT_0_VARIABLE",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF_IND  .LOCAL_TMP2_ARRAY_PTR",
+      "            .R_REF      .LOCAL_TMP1_VALUE_REF",
+      "            .R_OPERATOR .EQ",
+      "            .R_REF      .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_INT8     1",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+      "            .R_STOP",
+      "        VM_IF_CONST             .NE, .ARG0, 0, 2$, 1",
+      "        VM_IF_CONST             .LT, .LOCAL_TMP0_ARRAY_INDEX, 3, 1$, 0",
+      "        VM_JUMP                 3$",
+      "2$:",
+      "3$:",
+      "",
+    ]);
+  });
+
+  test("should evaluate search value before entering loop", async () => {
+    const sourceId = "22222222-2222-2222-2222-222222222222";
+
+    const { sb, output } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+          [sourceId]: {
+            id: sourceId,
+            name: "Source",
+            symbol: "var_source",
+            type: "number",
+          },
+        },
+      },
+    );
+
+    sb.ifValueInArray(
+      {
+        type: "add",
+        valueA: {
+          type: "variable",
+          value: sourceId,
+        },
+        valueB: {
+          type: "number",
+          value: 5,
+        },
+      },
+      arrayId,
+    );
+
+    const executable = withoutComments(output);
+
+    expect(executable.slice(0, 7)).toEqual([
+      "        VM_RPN",
+      "            .R_REF      VAR_SOURCE",
+      "            .R_INT16    5",
+      "            .R_OPERATOR .ADD",
+      "            .R_REF_SET  .LOCAL_TMP1_VALUE_REF",
+      "            .R_INT8     0",
+      "            .R_REF_SET  .LOCAL_TMP0_ARRAY_INDEX",
+    ]);
+
+    expect(
+      executable.filter((line) => line.includes(".R_REF      VAR_SOURCE")),
+    ).toHaveLength(1);
+  });
+
+  test("should reject nonarray variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: {
+            id: arrayId,
+            name: "Variable",
+            symbol: "var_value",
+            type: "number",
+          },
+        },
+      },
+    );
+
+    expect(() =>
+      sb.ifValueInArray({ type: "number", value: 13 }, arrayId),
+    ).toThrow();
+  });
+
+  test("should reject indexed array variable", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        variablesLookup: {
+          [arrayId]: arrayVariable(3),
+        },
+      },
+    );
+
+    expect(() =>
+      sb.ifValueInArray(
+        { type: "number", value: 13 },
+        {
+          type: "variable",
+          value: arrayId,
+          index: {
+            type: "number",
+            value: 1,
+          },
+        },
+      ),
+    ).toThrow();
+  });
+
+  test("should reject indirect argument that is not an array", async () => {
+    const { sb } = await createTestScriptBuilder(
+      {},
+      {
+        argLookup: {
+          actor: new Map(),
+          variable: new Map([
+            [
+              "V0",
+              {
+                type: "argument" as const,
+                indirect: true,
+                array: false,
+                symbol: ".SCRIPT_ARG_INDIRECT_0_VARIABLE",
+              },
+            ],
+          ]),
+        },
+      },
+    );
+
+    expect(() =>
+      sb.ifValueInArray({ type: "number", value: 13 }, "V0"),
+    ).toThrow();
+  });
+});
+
+describe("RPN local references", () => {
+  const expectLocalsNotToOverlap = (
+    localA: { addr: number; size: number },
+    localB: { addr: number; size: number },
+  ) => {
+    expect(
+      localA.addr + localA.size <= localB.addr ||
+        localB.addr + localB.size <= localA.addr,
+    ).toBe(true);
+  };
+
+  test("should ensure RPN locals don't overlap", async () => {
+    const { sb } = await createTestScriptBuilder();
+
+    const localA = sb._declareLocal("a", 4, true);
+
+    const rpn = sb._rpn();
+    rpn.ref(localA);
+
+    const tmpC = sb._declareLocal("c", 1, true);
+    sb._setConst(tmpC, 123);
+
+    const localB = sb._declareLocal("b", 4, true);
+    sb._setConst(localB, 2);
+
+    rpn.ref(localB).operator(".ADD").stop();
+
+    sb._packLocals();
+
+    const packedA = sb.localsLookup[localA];
+    const packedB = sb.localsLookup[localB];
+
+    expectLocalsNotToOverlap(packedA, packedB);
+  });
+
+  test("should ensure RPN offset locals don't overlap", async () => {
+    const { sb } = await createTestScriptBuilder();
+
+    const localA = sb._declareLocal("a", 4, true);
+
+    const rpn = sb._rpn();
+    rpn.ref(sb._localRef(localA, 1));
+
+    const tmpC = sb._declareLocal("c", 1, true);
+    sb._setConst(tmpC, 123);
+
+    const localB = sb._declareLocal("b", 4, true);
+    sb._setConst(localB, 2);
+
+    rpn.ref(localB).operator(".ADD").stop();
+
+    sb._packLocals();
+
+    const packedA = sb.localsLookup[localA];
+    const packedB = sb.localsLookup[localB];
+
+    expectLocalsNotToOverlap(packedA, packedB);
+  });
+
+  test("should ensure RPN locals used when writing don't overlap", async () => {
+    const { sb } = await createTestScriptBuilder();
+
+    const localA = sb._declareLocal("a", 1, true);
+
+    const rpn = sb._rpn();
+    rpn.int16(1).refSet(localA);
+
+    const tmpC = sb._declareLocal("c", 1, true);
+    sb._setConst(tmpC, 123);
+
+    const localB = sb._declareLocal("b", 1, true);
+    sb._setConst(localB, 2);
+
+    rpn.ref(localB).stop();
+
+    sb._packLocals();
+
+    const packedA = sb.localsLookup[localA];
+    const packedB = sb.localsLookup[localB];
+
+    expectLocalsNotToOverlap(packedA, packedB);
   });
 });
